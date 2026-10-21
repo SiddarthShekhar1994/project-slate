@@ -138,3 +138,19 @@ def test_storage_round_trip(tmp_path):
     store = LocalStorage(tmp_path)
     store.put("uploads/u1/a.pdf", b"%PDF", "application/pdf")
     assert store.get("uploads/u1/a.pdf") == b"%PDF" and store.local_path("uploads/u1/a.pdf").is_file()
+
+
+def test_windows_workers_start_without_a_console_window():
+    calls = []
+
+    class FakeWinapi:
+        SOME_CONSTANT = 7
+
+        def CreateProcess(self, *args):  # noqa: N802
+            calls.append(args)
+            return "handles"
+
+    wrapped = sandbox._NoWindowWinapi(FakeWinapi())
+    assert wrapped.CreateProcess("python.exe", "cmd", None, None, False, 0, None, None, None) == "handles"
+    assert calls[0][5] == sandbox.CREATE_NO_WINDOW
+    assert wrapped.SOME_CONSTANT == 7  # everything else passes through

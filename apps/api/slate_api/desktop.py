@@ -63,10 +63,14 @@ def main(argv: list[str] | None = None) -> None:
     if args.watch_stdin:
         threading.Thread(target=_exit_with_parent, name="parent-watch", daemon=True).start()
 
+    import logging
+
     import uvicorn
 
     from .main import app
 
+    # Slate's own messages (grading workers, source processing) go to the log too.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")
 
 

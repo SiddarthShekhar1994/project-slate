@@ -20,14 +20,19 @@ number of tasks and then retired.
 from __future__ import annotations
 
 import importlib
+import logging
 import multiprocessing as mp
 import os
 import queue
+import sys
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
 from ..config import get_settings
+
+log = logging.getLogger(__name__)
 
 _PRELOAD = ["sympy", "slate_skills", "slate_api.services.grading", "slate_api.services.problem_gen"]
 _ctx: Any = None
@@ -116,11 +121,51 @@ def _run_fresh(ctx, fn: Callable[..., Any], args, kwargs, limit: float) -> tuple
 
 # --- warm workers (spawn, i.e. Windows) ------------------------------------------------------
 
+CREATE_NO_WINDOW = 0x08000000
+
+
+class _NoWindowWinapi:
+    """``_winapi`` as multiprocessing's spawn sees it, with workers started windowless.
+
+    The Windows app starts the backend without a console. A worker is a
+    console program too, and Windows gives a console program started without
+    one a new console window: a black window would flash up for every
+    worker. Only this module's view of CreateProcess changes.
+    """
+
+    def __init__(self, real) -> None:
+        self._real = real
+
+    def __getattr__(self, name: str):
+        return getattr(self._real, name)
+
+    def CreateProcess(self, *args):  # noqa: N802 - mirrors _winapi
+        args = list(args)
+        args[5] |= CREATE_NO_WINDOW  # creation flags
+        return self._real.CreateProcess(*args)
+
+
+def _hide_worker_windows() -> None:
+    if sys.platform != "win32":
+        return
+    from multiprocessing import popen_spawn_win32
+
+    if not isinstance(popen_spawn_win32._winapi, _NoWindowWinapi):
+        popen_spawn_win32._winapi = _NoWindowWinapi(popen_spawn_win32._winapi)
+
+
 
 def _serve(conn, preload: list[str]) -> None:
     """Worker loop: import the heavy modules once, then run tasks until told to stop."""
-    for name in preload:
-        importlib.import_module(name)
+    try:
+        for name in preload:
+            importlib.import_module(name)
+    except BaseException:
+        # A spawned worker's own output goes nowhere on Windows, so report to the parent.
+        import traceback
+
+        conn.send(("failed", traceback.format_exc()))
+        return
     conn.send(("ready", None))
     while True:
         try:
@@ -138,18 +183,27 @@ def _serve(conn, preload: list[str]) -> None:
 
 class _Worker:
     def __init__(self, ctx) -> None:
+        self.started = time.monotonic()
         self.conn, child = ctx.Pipe(duplex=True)
         self.proc = ctx.Process(target=_serve, args=(child, _PRELOAD), daemon=True)
         self.proc.start()
         child.close()
         self.tasks = 0
+        log.info("grading worker %s starting", self.proc.pid)
 
     def wait_ready(self) -> None:
+        reason = "it didn't answer"
         try:
-            if self.conn.poll(WORKER_START_TIMEOUT) and self.conn.recv()[0] == "ready":
-                return
+            if self.conn.poll(WORKER_START_TIMEOUT):
+                status, detail = self.conn.recv()
+                if status == "ready":
+                    log.info("grading worker %s ready after %.1fs", self.proc.pid, time.monotonic() - self.started)
+                    return
+                reason = detail
         except EOFError:
-            pass
+            reason = f"it exited with code {self.proc.exitcode}"
+        log.error("grading worker %s failed to start after %.1fs: %s", self.proc.pid,
+                  time.monotonic() - self.started, reason)
         self.stop()
         raise SandboxError("a grading worker failed to start")
 
@@ -164,6 +218,7 @@ class _Worker:
 
 class _Pool:
     def __init__(self, ctx) -> None:
+        _hide_worker_windows()
         self.ctx = ctx
         self.idle: queue.Queue[_Worker] = queue.Queue()
         self.starting = 0
@@ -207,6 +262,7 @@ class _Pool:
             raise SandboxError("worker exited without a result") from None
         if not finished:
             # SandboxTimeout is an OSError (TimeoutError), so it is raised outside the handler above.
+            log.warning("grading worker %s ran past %ss; replacing it", worker.proc.pid, limit)
             worker.stop()
             raise SandboxTimeout(f"{getattr(fn, '__name__', 'task')} took longer than {limit}s")
         worker.tasks += 1

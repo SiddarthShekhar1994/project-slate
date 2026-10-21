@@ -44,9 +44,21 @@ jobs:
       - name: Install Python packages
         run: uv sync --all-packages --group desktop --frozen
 
+      # Diagnostics first: Windows grades with a pool of spawned workers (no fork).
+      # A stuck worker prints every thread's stack after a minute.
+      - name: Grading worker pool on Windows
+        continue-on-error: true
+        timeout-minutes: 10
+        run: uv run python -m pytest -v -p no:cacheprovider -o faulthandler_timeout=60 apps/api/tests/test_platform.py
+
       - name: Build the interface and the backend
         timeout-minutes: 30
         run: node apps/desktop/scripts/build.mjs
+
+      - name: Smoke-test the packaged backend (timings, worker processes, its log)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: uv run python apps/desktop/scripts/smoke_backend.py apps/desktop/build/backend/slate-api.exe
 
       - name: Package the installer
         run: |
@@ -67,6 +79,15 @@ jobs:
           export SLATE_APP_PATH="$(cygpath -m "$LOCALAPPDATA")/Programs/Slate/Slate.exe"
           export TEMP="$RUNNER_TEMP" TMP="$RUNNER_TEMP"  # so a failed run's app logs can be collected below
           pnpm --dir apps/desktop test
+
+      - name: Show the app's logs from a failed test
+        if: failure()
+        run: |
+          for f in "$(cygpath -u "$RUNNER_TEMP")"/slate-desktop-test-*/logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "===== $f"
+            tail -n 200 "$f"
+          done
 
       - name: Keep the installer
         uses: actions/upload-artifact@v4
