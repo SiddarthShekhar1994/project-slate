@@ -201,8 +201,13 @@ def _linear(rng: Random, *, a_max: int = 6, b_max: int = 9) -> list[int]:
     return [nonzero_int(rng, -a_max, a_max, exclude=(1, -1)), nonzero_int(rng, -b_max, b_max)]
 
 
-def _quadratic(rng: Random) -> list[int]:
-    return poly_coeffs(rng, 2, lo=-5, hi=5, min_terms=2)
+def _quadratic(rng: Random, *, positive: bool = False) -> list[int]:
+    """Quadratic coefficients. ``positive`` keeps the quadratic positive at 0 and for
+    large |x| so ln of it is a real function over most of the plotted range."""
+    while True:
+        a, b, c = poly_coeffs(rng, 2, lo=-5, hi=5, min_terms=2)
+        if not positive or (a > 0 and c > 0 and b * b < 4 * a * c):
+            return [a, b, c]
 
 
 def _family(id: str, difficulty: int, description: str, sample, build, word: bool = False) -> Family:
@@ -287,7 +292,7 @@ def _build_sqrt_poly(p: Params) -> Built:
 # d3 ----------------------------------------------------------------------
 
 def _sample_ln_poly(rng: Random) -> Params:
-    return {"inner": _quadratic(rng)}
+    return {"inner": _quadratic(rng, positive=True)}
 
 
 def _build_ln_poly(p: Params) -> Built:
@@ -452,6 +457,11 @@ def _composed(b: Built) -> sp.Expr:
     return b.parts["outer_prime"].subs(u, b.parts["inside_prime"])
 
 
+def _outer_not_differentiated(b: Built) -> sp.Expr:
+    # Kept the outer function as it was and only multiplied by the inside's derivative.
+    return b.parts["outer"].subs(u, b.parts["inside"]) * b.parts["inside_prime"]
+
+
 def _trig_sign(b: Built) -> sp.Expr | None:
     return -b.key if _has_trig_sign_layer(b) else None
 
@@ -518,6 +528,11 @@ MISTAKES = (
         "Look at how you combined the two derivatives. You plugged the inside's derivative into the outer "
         "derivative. The chain rule keeps the inside as it is in the outer derivative and multiplies by "
         "$[[inside_prime:yellow]]$ afterwards.",
+    ),
+    _pattern(
+        "wrong_outer_derivative", "outer_derivative", _outer_not_differentiated,
+        "You multiplied by the inside's derivative but left the outside function as it was. "
+        "Differentiate the outside first: $[[outer_prime]]$, evaluated at the inside.",
     ),
     _pattern(
         "trig_derivative_sign", "outer_derivative", _trig_sign,

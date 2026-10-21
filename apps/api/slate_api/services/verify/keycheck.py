@@ -15,6 +15,8 @@ Checks:
 ``mistakes``        every mistake pattern runs without error on this problem
 ``text``            hints, notes and the prompt render without missing placeholders
 ``size``            key and expression are small enough to read and type
+``domain``          the function is real-valued at several sample points (an implicit
+                    curve has real points), so the problem is about a real function
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ import sympy as sp
 from slate_skills.core.text import render
 from slate_skills.core.types import Built, SkillSpec
 
-from .equivalence import Equivalence, equivalent, numeric_screen
+from .equivalence import Equivalence, curve_points, equivalent, numeric_screen, real_sample_values
 
 MAX_KEY_OPS = 70
 MAX_EXPR_OPS = 45
@@ -208,6 +210,21 @@ def _check_text(skill: SkillSpec, built: Built) -> Check:
     return Check("text", True)
 
 
+MIN_REAL_POINTS = 3
+
+
+def _check_domain(built: Built) -> Check:
+    if built.task == "implicit_differentiate":
+        points = curve_points(built.expr, built.var, built.dependent)
+        if len(points) < MIN_REAL_POINTS:
+            return Check("domain", False, f"curve has only {len(points)} real sample points")
+        return Check("domain", True)
+    real = real_sample_values(built.expr, built.var)
+    if real < MIN_REAL_POINTS:
+        return Check("domain", False, f"function is real-valued at only {real} sample points")
+    return Check("domain", True)
+
+
 def _check_size(built: Built) -> Check:
     key_ops = sp.count_ops(built.key)
     expr_ops = sp.count_ops(built.expr)
@@ -228,7 +245,7 @@ def verify_built(skill: SkillSpec, built: Built) -> VerificationReport:
         return VerificationReport(False, "none", "none", (check,))
 
     oracle_check, oracle_name, method = _check_oracle(built)
-    checks = [oracle_check, _check_finite(built), _check_well_formed(built)]
+    checks = [oracle_check, _check_finite(built), _check_well_formed(built), _check_domain(built)]
     # Later checks assume a sound key; skip them if the oracle already failed.
     if oracle_check.passed:
         mistakes, signature = _check_mistakes(skill, built)
