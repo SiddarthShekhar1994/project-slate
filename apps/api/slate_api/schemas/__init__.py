@@ -35,3 +35,16 @@ class AnswerIn(BaseModel):
 class HintIn(BaseModel):
     level: int = Field(ge=1, le=3)
 
+
+class StepIn(BaseModel):
+    step: int = Field(ge=0, le=500)
+
+
+class AskIn(BaseModel):
+    step: int = Field(ge=0, le=500)
+    question: str = Field(min_length=1, max_length=500)
+
+
+class CheckpointIn(BaseModel):
+    step: int = Field(ge=0, le=500)
+    option: str = Field(min_length=1, max_length=20)

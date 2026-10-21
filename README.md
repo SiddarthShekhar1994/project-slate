@@ -90,7 +90,7 @@ Built in stages; each ships working before the next starts.
 
 1. Skills package, SymPy verification and generation, with tests. **Done.**
 2. Practice page with the retry loop, hint ladder and mistake tagging; local accounts. **Done.**
-3. Lesson player with board animation, captions, checkpoints and TTS. **Next.**
+3. Lesson player with board animation, captions, checkpoints and TTS. **Done.** The built-in chain rule lesson ships now; the ElevenLabs and OpenAI voices are tested against mocked responses, and a silent test voice exercises the audio-driven clock end to end.
 4. Source upload and ingestion, then generated lesson scripts cited to sources.
 5. Progress page, exam mode, formula sheet, review queue.
 6. Voice questions and photo answer input.

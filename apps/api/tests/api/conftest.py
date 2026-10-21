@@ -30,7 +30,8 @@ def clean_tables():
     yield
     with get_engine().begin() as conn:
         conn.execute(text(
-            "TRUNCATE mistake_tags, attempts, worksheet_items, worksheets, problems, auth_sessions, users CASCADE"
+            "TRUNCATE lesson_questions, checkpoint_answers, lesson_progress, mistake_tags, attempts, worksheet_items, "
+            "worksheets, problems, auth_sessions, users CASCADE"
         ))
 
 

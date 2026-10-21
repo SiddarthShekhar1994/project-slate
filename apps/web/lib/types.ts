@@ -1,3 +1,5 @@
+import type { LessonScript, WordTiming } from "./lesson/types";
+
 /** Shapes returned by the FastAPI backend. Keep in step with apps/api/slate_api/services/practice.py. */
 
 export type User = { id: string; email: string; display_name: string };
@@ -105,3 +107,40 @@ export type Grade = {
 export type AnswerResponse = { grade: Grade; item: WorksheetItem; stats: WorksheetStats };
 
 export type Preview = { ok: boolean; latex: string | null; error: string | null };
+
+// --- lessons -------------------------------------------------------------------
+
+export type MasteryStatus = "new" | "learning" | "practiced" | "mastered";
+
+export type OutlineSkill = { id: string; title: string; mastery: number | null; status: MasteryStatus };
+
+export type LessonSourceView = { id: string; title: string; kind: string; locator: string };
+
+export type Voice = { id: string; label: string };
+
+export type LessonView = {
+  id: string;
+  script: LessonScript;
+  skill: { id: string; title: string };
+  outline: { unit: string; skills: OutlineSkill[] };
+  sources: LessonSourceView[];
+  tts: { available: boolean; provider: string | null; voices: Voice[]; default_voice: string | null };
+  resume_step: number;
+};
+
+export type LessonSummary = {
+  id: string;
+  title: string;
+  skill: { id: string; title: string };
+  kind: "builtin" | "generated";
+  steps: number;
+  resume_step: number;
+  last_opened: string | null;
+  sources: number;
+};
+
+export type StepAudio =
+  | { status: "ok"; url: string; words: WordTiming[]; duration_ms: number }
+  | { status: "unavailable"; reason: string };
+
+export type AskAnswer = { answer: string; verified: boolean; notes: string[] };

@@ -1,0 +1,165 @@
+{
+  "id": "builtin-chain-rule",
+  "version": 1,
+  "skillId": "calc1.derivatives.chain_rule",
+  "title": "The chain rule",
+  "summary": "Differentiate a function inside a function: the outer derivative at the inside, times the inside's derivative.",
+  "sources": [],
+  "steps": [
+    {
+      "id": "setup",
+      "title": "The function",
+      "narration": [
+        "Here is the function we want to differentiate: ",
+        {"math": "f(x) = \\sin(x^3 + 1)", "say": "f of x equals sine of x cubed plus one."},
+        " Before reaching for a rule, look at how it is built."
+      ],
+      "actions": [
+        {"type": "write", "id": "f", "at": {"word": 3}, "row": 0, "size": "lg", "duration": 1600,
+         "latex": "f(x) = \\htmlClass{slate-part-outer}{\\sin}\\big(\\htmlClass{slate-part-inner}{x^3 + 1}\\big)"}
+      ]
+    },
+    {
+      "id": "spot",
+      "title": "Inside and outside",
+      "narration": [
+        "There is a function sitting inside another function. The inside is ",
+        {"math": "x^3 + 1", "say": "x cubed plus one."},
+        " The outside is the sine that acts on it."
+      ],
+      "actions": [
+        {"type": "highlight", "at": {"word": 9}, "target": "f", "part": "inner", "color": "yellow"},
+        {"type": "label", "id": "inside-label", "at": {"word": 10}, "target": "f", "part": "inner", "side": "below", "text": "inside", "color": "yellow"},
+        {"type": "highlight", "at": {"word": 15}, "target": "f", "part": "outer", "color": "mint"},
+        {"type": "label", "id": "outside-label", "at": {"word": 16}, "target": "f", "part": "outer", "side": "below", "text": "outside", "color": "mint"}
+      ]
+    },
+    {
+      "id": "name",
+      "title": "Name the pieces",
+      "narration": [
+        "Give the inside a name. Let ",
+        {"math": "u = x^3 + 1", "say": "u equal x cubed plus one,"},
+        " so the outside is just ",
+        {"math": "y = \\sin u", "say": "sine of u."}
+      ],
+      "actions": [
+        {"type": "fade", "at": {"word": 0}, "target": "inside-label"},
+        {"type": "fade", "at": {"word": 0}, "target": "outside-label"},
+        {"type": "write", "id": "u", "at": {"word": 6}, "row": 1, "duration": 1100,
+         "latex": "u = \\htmlClass{slate-yellow}{x^3 + 1}"},
+        {"type": "write", "id": "y", "at": {"word": 15}, "row": 1, "col": 6, "duration": 900,
+         "latex": "y = \\htmlClass{slate-mint}{\\sin u}"}
+      ]
+    },
+    {
+      "id": "rule",
+      "title": "The chain rule",
+      "narration": [
+        "The chain rule says ",
+        {"math": "\\frac{dy}{dx} = \\frac{dy}{du} \\cdot \\frac{du}{dx}", "say": "d y d x equals d y d u times d u d x."},
+        " In words: differentiate the outside, keep the inside as it is, then multiply by the derivative of the inside."
+      ],
+      "actions": [
+        {"type": "write", "id": "rule", "at": {"word": 4}, "row": 2, "duration": 1500,
+         "latex": "\\frac{dy}{dx} = \\htmlClass{slate-part-outer}{\\frac{dy}{du}} \\cdot \\htmlClass{slate-part-inner}{\\frac{du}{dx}}"},
+        {"type": "box", "at": {"word": 17}, "target": "rule", "color": "chalk"},
+        {"type": "highlight", "at": {"word": 18}, "target": "rule", "part": "outer", "color": "mint"},
+        {"type": "highlight", "at": {"word": 29}, "target": "rule", "part": "inner", "color": "yellow"}
+      ]
+    },
+    {
+      "id": "outer",
+      "title": "Outer derivative",
+      "narration": [
+        "Start with the outside. The derivative of sine of u, with respect to u, is ",
+        {"math": "\\cos u", "say": "cosine of u."}
+      ],
+      "actions": [
+        {"type": "write", "id": "dydu", "at": {"word": 9}, "row": 3, "duration": 1100,
+         "latex": "\\frac{dy}{du} = \\htmlClass{slate-mint}{\\cos u}"}
+      ],
+      "claims": [{"kind": "derivative", "of": "sin(u)", "var": "u", "equals": "cos(u)"}],
+      "checkpoint": {
+        "prompt": "Pause and predict: what is $\\frac{du}{dx}$ for $u = x^3 + 1$?",
+        "expect": {"kind": "derivative", "of": "x^3 + 1", "var": "x", "equals": "3x^2"},
+        "options": [
+          {"id": "a", "latex": "3x^2", "value": "3x^2", "say": "3 x squared", "correct": true, "why": "Power rule on $x^3$, and the constant 1 differentiates to 0."},
+          {"id": "b", "latex": "3x^2 + 1", "value": "3x^2 + 1", "say": "3 x squared plus 1", "correct": false, "why": "The constant term differentiates to 0, so the $+1$ disappears."},
+          {"id": "c", "latex": "x^2", "value": "x^2", "say": "x squared", "correct": false, "why": "The power rule brings the exponent 3 down in front: $3x^2$."},
+          {"id": "d", "latex": "3x^3", "value": "3x^3", "say": "3 x cubed", "correct": false, "why": "The exponent drops by one, from 3 to 2."}
+        ]
+      }
+    },
+    {
+      "id": "inner",
+      "title": "Inner derivative",
+      "narration": [
+        "Now the inside. The derivative of ",
+        {"math": "x^3 + 1", "say": "x cubed plus one"},
+        " is ",
+        {"math": "3x^2", "say": "three x squared."}
+      ],
+      "actions": [
+        {"type": "write", "id": "dudx", "at": {"word": 10}, "row": 3, "col": 6, "duration": 1000,
+         "latex": "\\frac{du}{dx} = \\htmlClass{slate-yellow}{3x^2}"}
+      ],
+      "claims": [{"kind": "derivative", "of": "x^3 + 1", "var": "x", "equals": "3x^2"}],
+      "checkpoint": {
+        "prompt": "Pause and predict: so what is $f'(x)$?",
+        "expect": {"kind": "derivative", "of": "sin(x^3 + 1)", "var": "x", "equals": "3x^2 cos(x^3 + 1)"},
+        "options": [
+          {"id": "a", "latex": "\\cos(x^3 + 1)", "value": "cos(x^3 + 1)", "say": "cosine of x cubed plus 1", "correct": false, "why": "That is only the outer derivative. The chain rule still multiplies by $3x^2$."},
+          {"id": "b", "latex": "\\cos(x^3 + 1) \\cdot 3x^2", "value": "cos(x^3 + 1) * 3x^2", "say": "cosine of x cubed plus 1, times 3 x squared", "correct": true, "why": "Outer derivative at the inside, times the inside's derivative."},
+          {"id": "c", "latex": "\\cos(3x^2)", "value": "cos(3x^2)", "say": "cosine of 3 x squared", "correct": false, "why": "The inside stays as it is inside the cosine. You multiply by $3x^2$ instead of plugging it in."},
+          {"id": "d", "latex": "-\\cos(x^3 + 1) \\cdot 3x^2", "value": "-cos(x^3 + 1) * 3x^2", "say": "negative cosine of x cubed plus 1, times 3 x squared", "correct": false, "why": "The derivative of sine is plus cosine. The minus sign belongs to the derivative of cosine."}
+        ]
+      }
+    },
+    {
+      "id": "multiply",
+      "title": "Multiply",
+      "narration": [
+        "Multiply the two, and put the inside back in place of u. That gives ",
+        {"math": "\\cos(x^3 + 1) \\cdot 3x^2", "say": "cosine of x cubed plus one, times three x squared."}
+      ],
+      "actions": [
+        {"type": "write", "id": "product", "at": {"word": 12}, "row": 4, "duration": 1800,
+         "latex": "f'(x) = \\htmlClass{slate-part-outer}{\\cos\\big(\\htmlClass{slate-yellow}{x^3 + 1}\\big)} \\cdot \\htmlClass{slate-part-inner}{3x^2}"},
+        {"type": "highlight", "at": {"word": 13}, "target": "product", "part": "outer", "color": "mint"},
+        {"type": "highlight", "at": {"word": 20}, "target": "product", "part": "inner", "color": "yellow"}
+      ],
+      "claims": [{"kind": "derivative", "of": "sin(x^3 + 1)", "var": "x", "equals": "cos(x^3 + 1) * 3x^2"}]
+    },
+    {
+      "id": "tidy",
+      "title": "Tidy up",
+      "narration": [
+        "Write the polynomial factor first, and the answer is ",
+        {"math": "f'(x) = 3x^2 \\cos(x^3 + 1)", "say": "three x squared cosine of x cubed plus one."}
+      ],
+      "actions": [
+        {"type": "fade", "at": {"word": 0}, "target": "u"},
+        {"type": "fade", "at": {"word": 0}, "target": "y"},
+        {"type": "fade", "at": {"word": 0}, "target": "rule"},
+        {"type": "write", "id": "answer", "at": {"word": 9}, "row": 5, "size": "lg", "duration": 1500,
+         "latex": "f'(x) = 3x^2 \\cos(x^3 + 1)"},
+        {"type": "box", "at": {"word": 15}, "target": "answer", "color": "mint"}
+      ],
+      "claims": [{"kind": "equal", "left": "cos(x^3 + 1) * 3x^2", "right": "3x^2 cos(x^3 + 1)", "vars": ["x"]}]
+    },
+    {
+      "id": "watch",
+      "title": "The usual slip",
+      "narration": [
+        "One last thing. The most common mistake is stopping at ",
+        {"math": "\\cos(x^3 + 1)", "say": "cosine of x cubed plus one"},
+        " and forgetting to multiply by the derivative of the inside. If the inside is more than just x, there is always an extra factor."
+      ],
+      "actions": [
+        {"type": "box", "at": {"word": 8}, "target": "product", "part": "inner", "color": "yellow"},
+        {"type": "label", "id": "dont-drop", "at": {"word": 15}, "target": "product", "part": "inner", "side": "right", "text": "don't drop this!", "color": "yellow"}
+      ]
+    }
+  ]
+}

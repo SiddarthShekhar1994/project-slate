@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { LessonList } from "@/components/lesson/LessonList";
 
-export const metadata: Metadata = { title: "Lesson" };
+export const metadata: Metadata = { title: "Lessons" };
 
 export default function Page() {
   return (
-    <div className="mx-auto max-w-3xl">
-      <p className="text-sm font-semibold text-accent-tint-text">Lesson</p>
-      <h1 className="mt-1 text-2xl font-bold">Lesson</h1>
-      <p className="mt-2 text-text-2">This page is being built next.</p>
-    </div>
+    <Suspense>
+      <LessonList />
+    </Suspense>
   );
 }

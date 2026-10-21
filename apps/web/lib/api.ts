@@ -1,5 +1,9 @@
 import type {
   AnswerResponse,
+  AskAnswer,
+  LessonSummary,
+  LessonView,
+  StepAudio,
   Catalog,
   Preview,
   User,
@@ -58,4 +62,13 @@ export const api = {
   hint: (itemId: string, level: number) => post<{ item: WorksheetItem }>(`/practice/items/${itemId}/hint`, { level }),
   similar: (itemId: string) =>
     post<{ item: WorksheetItem; stats: WorksheetStats }>(`/practice/items/${itemId}/similar`),
+
+  lessons: () => request<{ lessons: LessonSummary[] }>("/lessons"),
+  lesson: (id: string) => request<LessonView>(`/lessons/${id}`),
+  stepAudio: (id: string, step: number, voice: string, signal?: AbortSignal) =>
+    request<StepAudio>(`/lessons/${id}/steps/${step}/audio?voice=${encodeURIComponent(voice)}`, { signal }),
+  ask: (id: string, step: number, question: string) => post<AskAnswer>(`/lessons/${id}/ask`, { step, question }),
+  saveLessonProgress: (id: string, step: number) => post<void>(`/lessons/${id}/progress`, { step }),
+  checkpoint: (id: string, step: number, option: string) =>
+    post<{ correct: boolean }>(`/lessons/${id}/checkpoint`, { step, option }),
 };
