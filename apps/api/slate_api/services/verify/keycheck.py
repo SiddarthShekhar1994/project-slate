@@ -53,6 +53,15 @@ class VerificationReport:
     def failures(self) -> tuple[Check, ...]:
         return tuple(c for c in self.checks if not c.passed)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> VerificationReport:
+        return cls(
+            ok=bool(data["ok"]),
+            oracle=data["oracle"],
+            method=data["method"],
+            checks=tuple(Check(c["name"], bool(c["passed"]), c.get("detail", "")) for c in data["checks"]),
+        )
+
     def as_dict(self) -> dict:
         return {
             "ok": self.ok,

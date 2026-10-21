@@ -180,6 +180,21 @@ def rebuild(skill_id: str, family: str, params: dict, seed: int, *, origin: str 
     return problem
 
 
+def restore(skill_id: str, family: str, params: dict, seed: int, report: VerificationReport, signature: str, *,
+            origin: str = "template", parent: str | None = None) -> VerifiedProblem:
+    """Rebuild a problem that was verified when it was stored.
+
+    ``build`` is pure, so the same params give the same problem. If the
+    signature no longer matches (the template changed since), the problem is
+    verified again from scratch instead of trusting the old report.
+    """
+    skill = get_skill(skill_id)
+    built = skill.family(family).build(dict(params))
+    if problem_signature(skill.id, built) != signature or not report.ok:
+        return rebuild(skill_id, family, params, seed, origin=origin, parent=parent)
+    return _wrap(skill, built, seed, report, origin=origin, parent=parent)
+
+
 def similar(problem: VerifiedProblem, *, attempt: int = 0, exclude: Iterable[str] = (),
             same_family: bool = True) -> VerifiedProblem:
     """A new problem of the same skill and difficulty with different mathematics.
