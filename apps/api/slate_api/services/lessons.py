@@ -19,7 +19,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from ..models import CheckpointAnswer, Lesson, LessonProgress, User
+from ..models import CheckpointAnswer, Citation, Lesson, LessonProgress, User
 from . import tts
 from .mastery import skill_mastery
 from .verify.claims import script_is_sound
@@ -194,3 +194,38 @@ def latest_lesson(db: Session, user: User) -> tuple[Lesson, int] | None:
         return None
     lesson = db.get(Lesson, progress.lesson_id)
     return (lesson, progress.step) if lesson else None
+
+
+def generate_from_sources(db: Session, user: User, skill_id: str, *, llm=None, seed: int = 0) -> Lesson:
+    """Write a lesson for ``skill_id`` from the student's own sources, cited and verified."""
+    from .lesson_gen import ChunkRef, generate_lesson_script
+    from .sources import chunks_for_skill, notation_for_user
+
+    try:
+        get_skill(skill_id)
+    except KeyError:
+        raise LessonError("Unknown skill.", 422) from None
+    found = chunks_for_skill(db, user.id, skill_id)
+    if not found:
+        raise LessonError("None of your sources cover this skill yet. Upload slides or notes about it first.", 422)
+    refs = [
+        ChunkRef(id=str(chunk.id), source_title=source.title, source_kind=source.kind, locator=chunk.locator,
+                 heading=chunk.heading, text=chunk.text)
+        for chunk, source in found
+    ]
+    result = generate_lesson_script(skill_id, refs, notation_for_user(db, user.id), llm=llm, seed=seed)
+    record = verification_record(result.script)
+    if not record["ok"]:
+        raise LessonError("Slate couldn't build a lesson whose math checked out. Try again.", 502)
+    record["method"] = result.method
+    lesson = Lesson(user_id=user.id, skill_id=skill_id, kind="generated", slug=None,
+                    title=result.script["title"][:200], summary=result.script.get("summary", ""),
+                    script=result.script, verification=record, verified_at=_now())
+    db.add(lesson)
+    db.flush()
+    cited = {s["id"] for s in result.script.get("sources", [])}
+    for chunk, _ in found:
+        if str(chunk.id) in cited:
+            db.add(Citation(chunk_id=chunk.id, lesson_id=lesson.id))
+    db.flush()
+    return lesson

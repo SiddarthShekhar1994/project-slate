@@ -26,7 +26,7 @@ from slate_skills.core.types import DIFFICULTY_LABELS
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Attempt, MistakeTag, Problem, User, Worksheet, WorksheetItem
+from ..models import Attempt, Citation, MistakeTag, Problem, SourceChunk, User, Worksheet, WorksheetItem
 from . import sandbox
 from .grading import Grade, grade_answer
 from .problem_gen import VerifiedProblem, build_worksheet, restore, similar
@@ -73,7 +73,18 @@ def store_problem(db: Session, user: User, problem: VerifiedProblem, parent_id: 
     )
     db.add(row)
     db.flush()
+    _cite(db, user, row)
     return row
+
+
+def _cite(db: Session, user: User, row: Problem) -> None:
+    """Point the problem at the student's best source for its skill, if they have one."""
+    from .sources import best_chunk_for_skill
+
+    chunk = best_chunk_for_skill(db, user.id, row.skill_id)
+    if chunk is not None:
+        row.source_chunk_id = chunk.id
+        db.add(Citation(chunk_id=chunk.id, problem_id=row.id))
 
 
 def _latex(expr) -> str:
@@ -273,9 +284,18 @@ def item_view(db: Session, item: WorksheetItem) -> dict:
             "hints": problem.hints[: item.hint_level],
             "solution": problem.steps if cleared else None,
             "answer_latex": problem.key_latex if cleared else None,
+            "source": _source(db, problem),
         },
         "last_attempt": attempt_view(last) if last else None,
     }
+
+
+def _source(db: Session, problem: Problem) -> dict | None:
+    from .sources import citation_view
+
+    if problem.source_chunk_id is None:
+        return None
+    return citation_view(db.get(SourceChunk, problem.source_chunk_id))
 
 
 def attempt_view(attempt: Attempt) -> dict:

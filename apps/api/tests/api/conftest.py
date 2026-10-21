@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://slate:slate@localhost:5432/slate_test")
 os.environ["SANDBOX"] = "inline"
+os.environ.setdefault("STORAGE_DIR", "/tmp/slate-test-storage")
 
 import pytest
 from alembic import command
@@ -30,9 +31,10 @@ def clean_tables():
     yield
     with get_engine().begin() as conn:
         conn.execute(text(
-            "TRUNCATE lesson_questions, checkpoint_answers, lesson_progress, mistake_tags, attempts, worksheet_items, "
-            "worksheets, problems, auth_sessions, users CASCADE"
+            "TRUNCATE citations, source_chunks, sources, lesson_questions, checkpoint_answers, lesson_progress, "
+            "mistake_tags, attempts, worksheet_items, worksheets, problems, auth_sessions, users CASCADE"
         ))
+        conn.execute(text("DELETE FROM lessons WHERE user_id IS NOT NULL"))
 
 
 @pytest.fixture

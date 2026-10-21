@@ -4,9 +4,11 @@ from .base import Base
 from .catalog import Skill
 from .lesson import CheckpointAnswer, Lesson, LessonProgress, LessonQuestion
 from .practice import ITEM_STATUSES, Attempt, MistakeTag, Problem, Worksheet, WorksheetItem
+from .source import SOURCE_KINDS, Citation, Source, SourceChunk
 from .user import AuthSession, User
 
 __all__ = [
     "ITEM_STATUSES", "Attempt", "AuthSession", "Base", "CheckpointAnswer", "Lesson", "LessonProgress",
-    "LessonQuestion", "MistakeTag", "Problem", "Skill", "User", "Worksheet", "WorksheetItem",
+    "LessonQuestion", "MistakeTag", "Problem", "SOURCE_KINDS", "Skill", "Citation", "Source", "SourceChunk", "User",
+    "Worksheet", "WorksheetItem",
 ]

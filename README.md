@@ -17,13 +17,16 @@ The first course is single-variable calculus (MATH 30 level), starting with the 
 apps/
   api/                    FastAPI backend (Python, uv)
     slate_api/
-      routers/            auth, catalog, math (input preview), practice, lessons, media
+      routers/            auth, catalog, math (input preview), practice, lessons, sources, media
       services/
         verify/           parse.py, equivalence.py, keycheck.py, claims.py
         problem_gen/      engine.py: generate, similar, worksheets
         grading/          grade.py: correctness and mistake tagging
         practice.py       worksheets and the retry loop
-        lessons.py        built-in lessons, player views, progress, checkpoints
+        ingest/           extract (PDF, PPTX, DOCX, images), ocr, chunk, match skills, notation
+        lesson_gen/       lesson scripts from sources: Claude with checks, or the composer
+        sources.py        uploads, background processing, citations
+        lessons.py        built-in and generated lessons, player views, progress, checkpoints
         ask.py            "ask about this step", with claim checking
         tts.py            ElevenLabs or OpenAI speech with word timings, cached per step
         llm.py            the single Claude API wrapper
@@ -61,6 +64,8 @@ Open http://localhost:3000 and create an account.
 
 Without API keys everything still works. Hints, notes and "ask about this step" fall back to the templated text in the skills package, and lessons play with captions on an estimated clock. Set `ANTHROPIC_API_KEY` for Claude-written answers and lessons. Set `ELEVENLABS_API_KEY` or `OPENAI_API_KEY` (with `TTS_PROVIDER`) for the narrated voice.
 
+Uploaded images and picture-only pages are read with Claude vision. Without an API key Slate falls back to Tesseract, which needs the `tesseract` binary on the path (`apt install tesseract-ocr` or `brew install tesseract`). If neither is there, the page is kept but marked as unread.
+
 ## Tests
 
 ```bash
@@ -91,6 +96,6 @@ Built in stages; each ships working before the next starts.
 1. Skills package, SymPy verification and generation, with tests. **Done.**
 2. Practice page with the retry loop, hint ladder and mistake tagging; local accounts. **Done.**
 3. Lesson player with board animation, captions, checkpoints and TTS. **Done.** The built-in chain rule lesson ships now; the ElevenLabs and OpenAI voices are tested against mocked responses, and a silent test voice exercises the audio-driven clock end to end.
-4. Source upload and ingestion, then generated lesson scripts cited to sources.
+4. Source upload and ingestion, then generated lesson scripts cited to sources. **Done.** Uploads are split into topic-sized chunks, matched to skills and scanned for the professor's notation (prime, Leibniz or operator; ln or log; the letter for the inner function). Claude writes the lesson from the best chunks; every math claim and checkpoint is checked with SymPy, and a lesson that fails three times is replaced by one composed from a verified problem. Practice problems cite the chunk they were matched to.
 5. Progress page, exam mode, formula sheet, review queue.
 6. Voice questions and photo answer input.

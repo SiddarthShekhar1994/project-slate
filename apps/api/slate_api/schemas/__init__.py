@@ -48,3 +48,7 @@ class AskIn(BaseModel):
 class CheckpointIn(BaseModel):
     step: int = Field(ge=0, le=500)
     option: str = Field(min_length=1, max_length=20)
+
+
+class GenerateLessonIn(BaseModel):
+    skill_id: str = Field(min_length=1, max_length=120)

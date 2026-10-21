@@ -58,7 +58,9 @@ class Problem(Base):
     hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     verification: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    source_chunk_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    source_chunk_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("source_chunks.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = timestamp_column()
 
 

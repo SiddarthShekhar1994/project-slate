@@ -3,6 +3,7 @@ import type {
   AskAnswer,
   LessonSummary,
   LessonView,
+  SourceView,
   StepAudio,
   Catalog,
   Preview,
@@ -71,4 +72,40 @@ export const api = {
   saveLessonProgress: (id: string, step: number) => post<void>(`/lessons/${id}/progress`, { step }),
   checkpoint: (id: string, step: number, option: string) =>
     post<{ correct: boolean }>(`/lessons/${id}/checkpoint`, { step, option }),
+  generateLesson: (skill_id: string) => post<LessonSummary>("/lessons/generate", { skill_id }),
+
+  sources: () => request<{ sources: SourceView[]; kinds: Record<string, string> }>("/sources"),
+  source: (id: string) => request<SourceView>(`/sources/${id}`),
+  deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: "DELETE" }),
+  reprocessSource: (id: string) => post<SourceView>(`/sources/${id}/reprocess`),
+  uploadSource,
 };
+
+/**
+ * Upload with progress. fetch() has no upload progress events, so this uses
+ * XMLHttpRequest; the session cookie goes along because it is same-origin.
+ */
+function uploadSource(file: File, kind: string | null, onProgress?: (fraction: number) => void): Promise<SourceView> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (kind) form.append("kind", kind);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/sources");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) onProgress(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      let body: { detail?: unknown } & Partial<SourceView> = {};
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        body = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as SourceView);
+      else reject(new ApiError(xhr.status, typeof body.detail === "string" ? body.detail : "Upload failed. Try again."));
+    };
+    xhr.onerror = () => reject(new ApiError(0, "Upload failed. Check your connection and try again."));
+    xhr.send(form);
+  });
+}

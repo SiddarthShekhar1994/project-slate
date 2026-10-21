@@ -47,6 +47,11 @@ export function ProblemCard({ item, total, grade, busy, onAnswer, onHint, onSimi
       </header>
 
       <MathText as="p" text={item.problem.prompt} className="text-lg leading-relaxed text-text sm:text-xl" />
+      {item.problem.source && (
+        <p className="-mt-3 text-xs text-muted">
+          Practice for {item.problem.source.title}, {item.problem.source.locator}
+        </p>
+      )}
 
       {!locked && (
         <AnswerInput

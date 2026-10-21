@@ -48,6 +48,7 @@ export type ProblemView = {
   hints: string[];
   solution: SolutionStep[] | null;
   answer_latex: string | null;
+  source: SourceCitation | null;
 };
 
 export type AttemptView = { id: string; status: "correct" | "incorrect"; latex: string; mistake: Mistake | null };
@@ -144,3 +145,32 @@ export type StepAudio =
   | { status: "unavailable"; reason: string };
 
 export type AskAnswer = { answer: string; verified: boolean; notes: string[] };
+
+// --- sources -------------------------------------------------------------------
+
+export type SourceStatus = "processing" | "ready" | "failed";
+
+export type SourceSkill = { id: string; title: string; score: number };
+
+export type SourceChunkView = { id: string; heading: string; locator: string; excerpt: string; skills: SourceSkill[] };
+
+export type SourceView = {
+  id: string;
+  title: string;
+  filename: string;
+  kind: string;
+  kind_label: string;
+  status: SourceStatus;
+  error: string | null;
+  pages: number | null;
+  ocr: string | null;
+  size_bytes: number;
+  created_at: string;
+  file_url: string;
+  chunks: number;
+  skills: SourceSkill[];
+  used_for: { lessons: { id: string; title: string }[]; problems: number };
+  chunk_list?: SourceChunkView[];
+};
+
+export type SourceCitation = { source_id: string; title: string; kind: string; locator: string };

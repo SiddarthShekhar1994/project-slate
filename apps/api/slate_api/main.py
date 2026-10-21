@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_engine
 from .models import Skill
-from .routers import auth, catalog, lessons, math, media, practice
+from .routers import auth, catalog, lessons, math, media, practice, sources
 from .services import sandbox
 from .services.lessons import sync_builtin_lessons
 
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Slate API", version="0.1.0", lifespan=lifespan)
-    for module in (auth, catalog, lessons, math, media, practice):
+    for module in (auth, catalog, lessons, math, media, practice, sources):
         app.include_router(module.router, prefix="/api")
 
     @app.get("/api/health")

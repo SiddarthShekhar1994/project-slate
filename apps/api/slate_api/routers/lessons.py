@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import current_user
 from ..models import LessonQuestion, User
-from ..schemas import AskIn, CheckpointIn, StepIn
+from ..schemas import AskIn, CheckpointIn, GenerateLessonIn, StepIn
 from ..services import lessons
 from ..services.ask import answer_question
 
@@ -26,6 +26,18 @@ def _lesson(db: Session, user: User, lesson_id: uuid.UUID):
 @router.get("")
 def list_lessons(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     return {"lessons": [lessons.lesson_summary(db, user, l) for l in lessons.visible_lessons(db, user)]}
+
+
+@router.post("/generate", status_code=201)
+async def generate(body: GenerateLessonIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """Generate a lesson from the student's sources. Slow with Claude (it writes and
+    we verify, up to three tries), so it runs off the event loop."""
+    try:
+        lesson = await run_in_threadpool(lessons.generate_from_sources, db, user, body.skill_id)
+    except lessons.LessonError as exc:
+        raise HTTPException(exc.code, str(exc)) from None
+    db.commit()
+    return lessons.lesson_summary(db, user, lesson)
 
 
 @router.get("/{lesson_id}")
