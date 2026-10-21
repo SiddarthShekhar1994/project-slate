@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+/* Slate is dark-only for now. Every colour in the UI comes from these tokens. */
+:root {
+  color-scheme: dark;
+
+  --page: #0f1115;
+  --card: #181b22;
+  --raised: #1f232c;
+  --hover: #262b35;
+  --border: #2a3039;
+
+  --text: #f2f4f8;
+  --text-2: #c3cad6;
+  --muted: #9aa3b2;
+
+  --accent: #2748e8;
+  --accent-light: #7c9bff;
+  --accent-tint: #1c2446;
+  --accent-tint-text: #a9bbff;
+
+  --success: #4fd1b5;
+  --success-bg: #11302a;
+  --warning: #f2a65a;
+  --warning-bg: #3a2412;
+
+  --board: #10241e;
+  --chalk: #f3f1e7;
+  --yellow: #ffd66b;
+  --mint: #7fe0b5;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --ring: 0 0 0 2px var(--page), 0 0 0 4px var(--accent-light);
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-tint-text: var(--accent-tint-text);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-board: var(--board);
+  --color-chalk: var(--chalk);
+  --color-yellow: var(--yellow);
+  --color-mint: var(--mint);
+
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-math: var(--font-stix), "STIX Two Text", "Times New Roman", serif;
+  --font-hand: var(--font-caveat), "Caveat", cursive;
+
+  --radius-card: var(--radius);
+}
+
+html {
+  background: var(--page);
+}
+
+body {
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Visible focus for keyboard users on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--accent-tint);
+  color: var(--text);
+}
+
+/* KaTeX: STIX Two Text for letters and digits, KaTeX's own fonts for
+   delimiters, radicals and large operators so layout metrics stay right. */
+.katex {
+  font-family: var(--font-math);
+  font-size: 1.12em;
+  color: inherit;
+}
+.katex .mathnormal,
+.katex .mathit {
+  font-family: var(--font-math);
+  font-style: italic;
+}
+.katex .mathrm,
+.katex .mord.mtight,
+.katex .mop {
+  font-family: var(--font-math);
+}
+.katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+}
+
+/* Board highlight colours, referenced from skill text as \htmlClass{slate-yellow}{...}. */
+.slate-yellow {
+  color: var(--yellow);
+}
+.slate-mint {
+  color: var(--mint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
