@@ -78,7 +78,7 @@ scripts/                  setup.sh, start.sh, check_skill.py, e2e_keys.py, dev-r
 You need:
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (it installs Python for you)
-- Node 24 LTS, or Node 22.22.2 or newer, with pnpm 10: run `corepack enable` once
+- Node 24 LTS, or Node 22.22.2 or newer, with pnpm 10: run `corepack enable` once (Node 25 and later don't include corepack; use `npm install -g pnpm@10` there)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for the database, or your own PostgreSQL 16 (see "Without Docker" below)
 
 It runs on macOS and Linux. On Windows, use WSL2: install Ubuntu from the Microsoft Store, turn on WSL integration in Docker Desktop's settings, clone the repo inside your Linux home folder (not under `/mnt/c`), and run every command in the Ubuntu terminal.
@@ -107,7 +107,7 @@ uv run --env-file .env uvicorn slate_api.main:app --port 8000    # terminal 1: A
 pnpm --dir apps/web dev --port 3000                              # terminal 2: web app
 ```
 
-The API only reads real environment variables, so `.env` takes effect through `uv run --env-file .env`. The web app forwards `/api` to http://localhost:8000. If you run the API somewhere else, put `API_ORIGIN=http://localhost:<port>` in `apps/web/.env.local`, because Next.js doesn't read the root `.env`.
+The API only reads real environment variables, so `.env` takes effect through `uv run --env-file .env`. A variable already exported in your shell wins over the same one in `.env`. The web app forwards `/api` to http://localhost:8000. If you run the API somewhere else, put `API_ORIGIN=http://localhost:<port>` in `apps/web/.env.local`, because Next.js doesn't read the root `.env`.
 
 ### Without Docker
 
@@ -136,7 +136,7 @@ Without `ANTHROPIC_API_KEY`, images and picture-only pages are read with Tessera
 uv run pytest                                   # verification, generation, grading, API
 uv run python scripts/check_skill.py calc1.derivatives.chain_rule --seeds 100
 pnpm --dir apps/web test                        # Vitest: KaTeX, timeline engine, captions
-pnpm --dir apps/web exec playwright install chromium   # once, for the end-to-end tests
+pnpm --dir apps/web exec playwright install --with-deps chromium   # once, for the end-to-end tests
 pnpm --dir apps/web e2e                         # Playwright, desktop and phone
 pnpm --dir apps/desktop test                    # the desktop app, driven through Electron
 ```

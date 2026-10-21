@@ -31,7 +31,8 @@ USER_TABLES = ("citations", "source_chunks", "sources", "lesson_questions", "che
 def schema():
     engine = get_engine()
     url = engine.url
-    name = Path(url.database or "").stem
+    # psycopg lets ?dbname= override the path, so check what will really be used.
+    name = Path(url.query.get("dbname") or url.database or "").stem
     assert name.endswith("_test"), f"refusing to rebuild the schema of {name!r}: use a *_test database"
     cfg = Config(os.path.join(API_DIR, "alembic.ini"))
     cfg.set_main_option("script_location", os.path.join(API_DIR, "migrations"))

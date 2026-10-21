@@ -1,0 +1,6 @@
+{
+  "name": "slate",
+  "private": true,
+  "description": "Corepack reads packageManager from here, so pnpm commands run from the repo root use the version apps/web and apps/desktop are pinned to.",
+  "packageManager": "pnpm@10.28.0"
+}

@@ -22,11 +22,17 @@ if [ ! -f .env ]; then
 fi
 
 step "Starting PostgreSQL"
-if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+if [ "${SLATE_LOCAL_POSTGRES:-}" = "1" ] || ! command -v docker >/dev/null; then
+  echo "Using the PostgreSQL at DATABASE_URL in .env."
+elif ! docker info >/dev/null 2>&1; then
+  fail "Docker is installed but not running. Start Docker Desktop and run this again.
+To use your own PostgreSQL instead, run: SLATE_LOCAL_POSTGRES=1 scripts/setup.sh"
+else
   docker compose up -d --wait postgres || fail "Couldn't start PostgreSQL in Docker. If another PostgreSQL
 is already using port 5432, stop it, or use it instead (see 'Without Docker' in the README)."
-else
-  echo "Docker isn't running, so Slate will use the PostgreSQL at DATABASE_URL in .env."
+  # A database volume from before slate_test was added doesn't have it yet.
+  docker compose exec -T postgres psql -U slate -d slate -tAc "SELECT 1 FROM pg_database WHERE datname = 'slate_test'" \
+    | grep -q 1 || docker compose exec -T postgres createdb -U slate slate_test
 fi
 
 step "Installing Python packages"
