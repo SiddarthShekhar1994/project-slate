@@ -32,7 +32,7 @@ def clean_tables():
     with get_engine().begin() as conn:
         conn.execute(text(
             "TRUNCATE citations, source_chunks, sources, lesson_questions, checkpoint_answers, lesson_progress, "
-            "mistake_tags, attempts, worksheet_items, worksheets, problems, auth_sessions, users CASCADE"
+            "skill_cards, mistake_tags, attempts, worksheet_items, worksheets, problems, auth_sessions, users CASCADE"
         ))
         conn.execute(text("DELETE FROM lessons WHERE user_id IS NOT NULL"))
 

@@ -52,3 +52,20 @@ class CheckpointIn(BaseModel):
 
 class GenerateLessonIn(BaseModel):
     skill_id: str = Field(min_length=1, max_length=120)
+
+
+class ExamIn(BaseModel):
+    # skill id -> weight; any positive numbers, normalised by the server
+    weights: dict[str, float] = Field(min_length=1, max_length=12)
+    count: int = Field(default=8, ge=1, le=12)
+    pace: str = Field(default="exam", pattern="^(exam|study)$")
+    seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
+
+
+class ExamAnswerIn(BaseModel):
+    answer: str = Field(max_length=500)
+
+
+class ReviewIn(BaseModel):
+    # Defaults to every skill that is due.
+    skill_ids: list[str] | None = Field(default=None, max_length=8)

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -22,7 +23,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, timestamp_column, uuid_column
 
-ITEM_STATUSES = ("up_next", "retrying", "cleared", "cleared_after_retry")
+# "missed" is only used in exam pace, where a wrong or blank answer gets no retry.
+ITEM_STATUSES = ("up_next", "retrying", "cleared", "cleared_after_retry", "missed")
+WORKSHEET_MODES = ("practice", "review", "exam")
 
 
 class Problem(Base):
@@ -74,6 +77,9 @@ class Worksheet(Base):
     skill_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="practice")
     seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Exam settings: pace, weights, time limit. Empty for practice and review.
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -109,6 +115,8 @@ class WorksheetItem(Base):
     hint_level: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     needs_new_problem: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Exam pace: the answer as typed, graded only when the exam is handed in.
+    exam_answer: Mapped[str | None] = mapped_column(Text)
 
     worksheet: Mapped[Worksheet] = relationship(back_populates="items")
     current_problem: Mapped[Problem] = relationship(foreign_keys=[current_problem_id])
@@ -163,3 +171,27 @@ class MistakeTag(Base):
     created_at: Mapped[datetime] = timestamp_column()
 
     attempt: Mapped[Attempt] = relationship(back_populates="mistake")
+
+
+class SkillCard(Base):
+    """SM-2 state for one student and one skill; drives the review queue.
+
+    ``sitting`` holds the qualities seen in the current sitting and the card
+    as it was before the sitting began, so several items on the same skill
+    in one afternoon count as a single review.
+    """
+
+    __tablename__ = "skill_cards"
+    __table_args__ = (UniqueConstraint("user_id", "skill_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_column()
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+                                               nullable=False, index=True)
+    skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id"), nullable=False)
+    easiness: Mapped[float] = mapped_column(Float, nullable=False)
+    interval_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    repetitions: Mapped[int] = mapped_column(Integer, nullable=False)
+    lapses: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    last_reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sitting: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

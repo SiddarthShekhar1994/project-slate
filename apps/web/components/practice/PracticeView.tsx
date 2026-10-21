@@ -8,6 +8,8 @@ import { STATUS_LABELS, StatusPill } from "@/components/shared/ui/StatusPill";
 import { ApiError, api } from "@/lib/api";
 import { replaceQuery } from "@/lib/urlState";
 import type { Grade, Worksheet, WorksheetItem, WorksheetStats } from "@/lib/types";
+import { clock } from "@/lib/format";
+import { useCountdown } from "@/lib/useCountdown";
 import { EndScreen } from "./EndScreen";
 import { ProblemCard } from "./ProblemCard";
 import { StatusPanel } from "./StatusPanel";
@@ -153,7 +155,10 @@ export function PracticeView({ worksheetId }: { worksheetId: string }) {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <p className="text-sm font-semibold text-accent-tint-text">Practice</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-accent-tint-text">{KICKERS[sheet.mode] ?? "Practice"}</p>
+          {sheet.timer && !sheet.completed_at && <StudyTimer endsAt={sheet.timer.ends_at} now={sheet.timer.now} />}
+        </div>
         <h1 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">{sheet.title}</h1>
         <p className="text-sm text-text-2">
           {sheet.stats.total} problems, easy to hard. Miss one and you get a fresh problem of the same kind until it
@@ -219,5 +224,28 @@ export function PracticeView({ worksheetId }: { worksheetId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+const KICKERS: Record<string, string> = { practice: "Practice", review: "Review", exam: "Practice exam" };
+
+/** Study pace keeps the clock in view but never takes the problem away. */
+function StudyTimer({ endsAt, now }: { endsAt: string; now: string }) {
+  const left = useCountdown(endsAt, now);
+  if (left === null) return null;
+  return (
+    <p className="text-sm text-text-2">
+      {left > 0 ? (
+        <>
+          <span className="sr-only">Time left: </span>
+          <span role="timer" className="font-mono text-base font-bold text-text tabular-nums">
+            {clock(left)}
+          </span>{" "}
+          left
+        </>
+      ) : (
+        <span className="font-semibold text-warning">Time&apos;s up. Finish at your own pace.</span>
+      )}
+    </p>
   );
 }

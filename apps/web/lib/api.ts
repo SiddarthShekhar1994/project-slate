@@ -6,7 +6,14 @@ import type {
   SourceView,
   StepAudio,
   Catalog,
+  ExamCreated,
+  ExamPace,
+  ExamView,
+  ExamWeight,
+  FormulaSheet,
   Preview,
+  ProgressView,
+  ReviewQueue,
   User,
   Worksheet,
   WorksheetItem,
@@ -73,6 +80,26 @@ export const api = {
   checkpoint: (id: string, step: number, option: string) =>
     post<{ correct: boolean }>(`/lessons/${id}/checkpoint`, { step, option }),
   generateLesson: (skill_id: string) => post<LessonSummary>("/lessons/generate", { skill_id }),
+
+  progress: () => request<ProgressView>("/progress"),
+  reviewQueue: () => request<ReviewQueue>("/progress/review"),
+  startReview: (skill_ids?: string[]) => post<Worksheet>("/progress/review", { skill_ids: skill_ids ?? null }),
+  formulaSheet: (skills: string[]) =>
+    request<FormulaSheet>(`/progress/formula-sheet?skills=${encodeURIComponent(skills.join(","))}`),
+
+  examWeights: (skills: string[]) =>
+    request<{ weights: ExamWeight[]; minutes: Record<string, number>; study_factor: number }>(
+      `/exam/weights?skills=${encodeURIComponent(skills.join(","))}`,
+    ),
+  createExam: (weights: Record<string, number>, count: number, pace: ExamPace) =>
+    post<ExamCreated>("/exam", { weights, count, pace }),
+  exam: (id: string) => request<ExamView>(`/exam/${id}`),
+  saveExamAnswer: (itemId: string, answer: string) =>
+    request<{ id: string; answer: string | null }>(`/exam/items/${itemId}/answer`, {
+      method: "PUT",
+      body: JSON.stringify({ answer }),
+    }),
+  finishExam: (id: string) => post<ExamView>(`/exam/${id}/finish`),
 
   sources: () => request<{ sources: SourceView[]; kinds: Record<string, string> }>("/sources"),
   source: (id: string) => request<SourceView>(`/sources/${id}`),

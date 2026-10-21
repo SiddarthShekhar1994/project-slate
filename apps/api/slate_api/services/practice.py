@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Attempt, Citation, MistakeTag, Problem, SourceChunk, User, Worksheet, WorksheetItem
-from . import sandbox
+from . import review, sandbox
 from .grading import Grade, grade_answer
 from .problem_gen import VerifiedProblem, build_worksheet, restore, similar
 from .verify import VerificationReport
@@ -152,6 +152,10 @@ def _item(db: Session, user: User, item_id: uuid.UUID) -> WorksheetItem:
     item = db.get(WorksheetItem, item_id)
     if item is None or item.worksheet.user_id != user.id:
         raise PracticeError("Problem not found.", 404)
+    sheet = item.worksheet
+    if sheet.mode == "exam" and (sheet.settings or {}).get("pace") == "exam":
+        # Exam pace has no hints or retries; answers are handed in together.
+        raise PracticeError("Answers on an exam are handed in together.")
     return item
 
 
@@ -200,6 +204,8 @@ def submit_answer(db: Session, user: User, item_id: uuid.UUID, raw: str, duratio
     if grade.correct:
         item.status = "cleared" if item.misses == 0 else "cleared_after_retry"
         item.cleared_at = _now()
+        review.record(db, user.id, item.skill_id,
+                      review.item_quality(correct=True, misses=item.misses, hints_used=item.hint_level))
         sheet = item.worksheet
         if all(i.status in ("cleared", "cleared_after_retry") for i in sheet.items):
             sheet.completed_at = _now()
@@ -344,7 +350,16 @@ def worksheet_view(db: Session, sheet: Worksheet) -> dict:
         "completed_at": sheet.completed_at.isoformat() if sheet.completed_at else None,
         "items": [item_view(db, item) for item in sheet.items],
         "stats": stats(sheet),
+        "timer": _timer(sheet),
     }
+
+
+def _timer(sheet: Worksheet) -> dict | None:
+    """A study-pace exam runs against a clock the student can see but not lose to."""
+    if sheet.ends_at is None:
+        return None
+    return {"ends_at": sheet.ends_at.isoformat(), "now": _now().isoformat(),
+            "time_limit_s": (sheet.settings or {}).get("time_limit_s")}
 
 
 def worksheet_summary(sheet: Worksheet) -> dict:

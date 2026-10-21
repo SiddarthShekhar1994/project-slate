@@ -17,12 +17,15 @@ The first course is single-variable calculus (MATH 30 level), starting with the 
 apps/
   api/                    FastAPI backend (Python, uv)
     slate_api/
-      routers/            auth, catalog, math (input preview), practice, lessons, sources, media
+      routers/            auth, catalog, math (input preview), practice, lessons, sources, progress, exam, media
       services/
         verify/           parse.py, equivalence.py, keycheck.py, claims.py
         problem_gen/      engine.py: generate, similar, worksheets
         grading/          grade.py: correctness and mistake tagging
         practice.py       worksheets and the retry loop
+        review.py         SM-2 spaced repetition on skills: the review queue
+        exam.py           timed sets weighted by the syllabus, graded at hand-in
+        progress.py       skill map, ranked mistakes, formula sheet
         ingest/           extract (PDF, PPTX, DOCX, images), ocr, chunk, match skills, notation
         lesson_gen/       lesson scripts from sources: Claude with checks, or the composer
         sources.py        uploads, background processing, citations
@@ -36,7 +39,8 @@ apps/
       lessons/builtin/    hand-written lesson scripts (JSON)
     tests/
   web/                    Next.js 16 + TypeScript + Tailwind 4 + KaTeX
-    app/                  routes: /library, /lesson/[id], /practice/[id], /progress, /login
+    app/                  routes: /library, /lesson/[id], /practice/[id], /progress, /progress/exam,
+                          /progress/formulas, /exam/[id], /login
     components/           grouped by page, plus shared/board, shared/math, shared/ui
     lib/lesson/           lesson script types and the timeline engine
 packages/
@@ -97,5 +101,5 @@ Built in stages; each ships working before the next starts.
 2. Practice page with the retry loop, hint ladder and mistake tagging; local accounts. **Done.**
 3. Lesson player with board animation, captions, checkpoints and TTS. **Done.** The built-in chain rule lesson ships now; the ElevenLabs and OpenAI voices are tested against mocked responses, and a silent test voice exercises the audio-driven clock end to end.
 4. Source upload and ingestion, then generated lesson scripts cited to sources. **Done.** Uploads are split into topic-sized chunks, matched to skills and scanned for the professor's notation (prime, Leibniz or operator; ln or log; the letter for the inner function). Claude writes the lesson from the best chunks; every math claim and checkpoint is checked with SymPy, and a lesson that fails three times is replaced by one composed from a verified problem. Practice problems cite the chunk they were matched to.
-5. Progress page, exam mode, formula sheet, review queue.
+5. Progress page, exam mode, formula sheet, review queue. **Done.** The skill map shows mastery per skill; mistakes are ranked by a count where each miss weighs half as much for every two weeks of age. Every cleared problem feeds an SM-2 schedule per skill (several in one sitting count as one review), and due skills can be reviewed in one click. Practice exams take topics, weights (read from an uploaded syllabus when it gives percentages) and a pace: exam pace has no hints, one try and grading at hand-in; study pace keeps the practice loop with half as much time again. The formula sheet covers the chosen topics in the professor's notation and prints cleanly.
 6. Voice questions and photo answer input.

@@ -15,6 +15,11 @@ type Props = {
   onSubmit: (text: string) => void;
   /** Focus the field when it appears (a new problem was served). */
   autoFocus?: boolean;
+  /** Text to start with, e.g. an exam answer saved earlier. */
+  initialText?: string;
+  label?: string;
+  submitLabel?: string;
+  busyLabel?: string;
 };
 
 const INSERTS: { label: string; aria: string; text: string; caret: number }[] = [
@@ -36,8 +41,20 @@ function Key({ children }: { children: ReactNode }) {
   return <kbd className="rounded border border-border bg-raised px-1 font-mono text-[0.85em] text-text-2">{children}</kbd>;
 }
 
-export function AnswerInput({ variables, answerKind, disabled, busy, blocked, onSubmit, autoFocus }: Props) {
-  const [text, setText] = useState("");
+export function AnswerInput({
+  variables,
+  answerKind,
+  disabled,
+  busy,
+  blocked,
+  onSubmit,
+  autoFocus,
+  initialText = "",
+  label = "Your answer",
+  submitLabel = "Check answer",
+  busyLabel = "Checking…",
+}: Props) {
+  const [text, setText] = useState(initialText);
   // The preview remembers which text it is for, so a stale response never shows.
   const [preview, setPreview] = useState<{ text: string; result: Preview } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +118,7 @@ export function AnswerInput({ variables, answerKind, disabled, busy, blocked, on
       }}
     >
       <label htmlFor={id} className="text-sm font-semibold text-text-2">
-        Your answer
+        {label}
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
@@ -124,7 +141,7 @@ export function AnswerInput({ variables, answerKind, disabled, busy, blocked, on
           disabled={disabled || busy || blocked || !text.trim()}
           className="inline-flex min-h-12 items-center justify-center rounded-[10px] bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-[#3557f0] disabled:cursor-not-allowed disabled:bg-raised disabled:text-muted"
         >
-          {busy ? "Checking…" : "Check answer"}
+          {busy ? busyLabel : submitLabel}
         </button>
       </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Insert symbols">

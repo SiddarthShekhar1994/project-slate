@@ -233,17 +233,22 @@ def plan_difficulties(skill: SkillSpec, count: int) -> list[int]:
     return out
 
 
-def build_worksheet(skill_ids: Sequence[str], count: int, seed: int, *,
-                    include_word: bool = True) -> list[VerifiedProblem]:
+def build_worksheet(skill_ids: Sequence[str], count: int, seed: int, *, include_word: bool = True,
+                    counts: Sequence[int] | None = None) -> list[VerifiedProblem]:
     """A worksheet ordered easy to hard, spread across ``skill_ids``.
 
     Every problem is distinct. When ``include_word`` is set and a skill has
     word families, one slot at medium difficulty or above becomes a word problem.
+    ``counts`` gives the number of problems per skill (an exam weighted by the
+    syllabus); without it ``count`` is split evenly.
     """
     if not skill_ids:
         raise ValueError("a worksheet needs at least one skill")
+    if counts is not None and len(counts) != len(skill_ids):
+        raise ValueError("one count per skill")
     slots: list[tuple[int, str]] = []
-    per_skill = [count // len(skill_ids) + (1 if i < count % len(skill_ids) else 0) for i in range(len(skill_ids))]
+    per_skill = list(counts) if counts is not None else [
+        count // len(skill_ids) + (1 if i < count % len(skill_ids) else 0) for i in range(len(skill_ids))]
     for skill_id, n in zip(skill_ids, per_skill):
         skill = get_skill(skill_id)
         slots += [(d, skill_id) for d in plan_difficulties(skill, n)]

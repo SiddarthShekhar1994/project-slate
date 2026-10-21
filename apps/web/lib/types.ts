@@ -26,7 +26,7 @@ export type Catalog = {
   }[];
 };
 
-export type ItemStatus = "up_next" | "retrying" | "cleared" | "cleared_after_retry";
+export type ItemStatus = "up_next" | "retrying" | "cleared" | "cleared_after_retry" | "missed";
 
 export type Mistake = {
   tag: string;
@@ -87,6 +87,8 @@ export type Worksheet = {
   completed_at: string | null;
   items: WorksheetItem[];
   stats: WorksheetStats;
+  /** Study-pace exams only. */
+  timer: { ends_at: string; now: string; time_limit_s: number | null } | null;
 };
 
 export type WorksheetSummary = {
@@ -174,3 +176,122 @@ export type SourceView = {
 };
 
 export type SourceCitation = { source_id: string; title: string; kind: string; locator: string };
+
+export type SkillProgress = {
+  id: string;
+  title: string;
+  summary: string;
+  mastery: number | null;
+  status: "new" | "learning" | "practiced" | "mastered";
+  attempts: number;
+  first_try_rate: number | null;
+  last_practiced_at: string | null;
+  due_at: string | null;
+  prerequisites: string[];
+};
+
+export type CourseProgress = {
+  id: string;
+  title: string;
+  units: { id: string; title: string; skills: SkillProgress[] }[];
+};
+
+export type RankedMistake = {
+  tag: string;
+  label: string;
+  description: string;
+  category: string;
+  category_label: string;
+  count: number;
+  recent: number;
+  score: number;
+  last_seen_at: string;
+  skills: { id: string; title: string; count: number }[];
+  example: string;
+};
+
+export type ReviewEntry = {
+  skill: { id: string; title: string };
+  due_at: string;
+  interval_days: number;
+  repetitions: number;
+  lapses: number;
+  last_reviewed_at: string;
+  overdue_days: number;
+};
+
+export type ReviewQueue = { due: ReviewEntry[]; upcoming: ReviewEntry[] };
+
+export type ProgressView = {
+  summary: { answers: number; problems_cleared: number; first_try_rate: number | null };
+  courses: CourseProgress[];
+  mistakes: RankedMistake[];
+  review: ReviewQueue;
+};
+
+export type FormulaSheet = {
+  units: {
+    id: string;
+    title: string;
+    course: string;
+    entries: {
+      skill: { id: string; title: string };
+      title: string;
+      latex: string;
+      note: string;
+      source: SourceCitation | null;
+    }[];
+  }[];
+  notation: string | null;
+};
+
+export type ExamWeight = {
+  skill_id: string;
+  weight: number;
+  source: { title: string; locator: string; line: string } | null;
+};
+
+export type ExamPace = "exam" | "study";
+
+export type ExamItem = {
+  id: string;
+  position: number;
+  skill: { id: string; title: string };
+  difficulty: number;
+  difficulty_label: string;
+  problem: { id: string; prompt: string; variables: string[]; answer_kind: "expression" | "number"; is_word: boolean };
+  answer: string | null;
+  result: {
+    status: "correct" | "incorrect" | "blank";
+    attempt: AttemptView | null;
+    answer_latex: string;
+    solution: SolutionStep[];
+  } | null;
+};
+
+export type ExamView = {
+  id: string;
+  title: string;
+  pace: ExamPace;
+  weights: Record<string, number>;
+  time_limit_s: number;
+  ends_at: string;
+  now: string;
+  time_used_s: number | null;
+  finished: boolean;
+  completed_at: string | null;
+  skills: { id: string; title: string }[];
+  items: ExamItem[];
+  stats: {
+    total: number;
+    answered: number;
+    correct: number | null;
+    incorrect: number | null;
+    blank: number | null;
+    by_skill: { skill: { id: string; title: string }; total: number; correct: number }[] | null;
+  };
+};
+
+export type ExamCreated =
+  | { id: string; pace: "exam"; exam: ExamView }
+  | { id: string; pace: "study"; worksheet: Worksheet };

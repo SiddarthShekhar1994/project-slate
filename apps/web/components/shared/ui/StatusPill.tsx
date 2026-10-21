@@ -5,6 +5,7 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
   retrying: "Retrying",
   cleared: "Cleared",
   cleared_after_retry: "Cleared after retry",
+  missed: "Missed",
 };
 
 const STYLES: Record<ItemStatus, string> = {
@@ -12,6 +13,7 @@ const STYLES: Record<ItemStatus, string> = {
   retrying: "bg-warning-bg text-warning border-warning/40",
   cleared: "bg-success-bg text-success border-success/40",
   cleared_after_retry: "bg-accent-tint text-accent-tint-text border-accent-light/40",
+  missed: "bg-warning-bg text-warning border-warning/40",
 };
 
 export function StatusPill({ status, className = "" }: { status: ItemStatus; className?: string }) {
