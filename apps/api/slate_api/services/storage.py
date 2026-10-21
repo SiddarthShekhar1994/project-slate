@@ -27,8 +27,11 @@ class Storage(Protocol):
 
 
 def _safe_key(key: str) -> str:
+    # Keys are forward-slash paths under the storage root. Backslashes and drive
+    # letters are refused because on Windows they would anchor the path elsewhere.
     parts = Path(key).parts
-    if not parts or key.startswith("/") or any(p in ("..", "") for p in parts):
+    if (not parts or key.startswith("/") or "\\" in key or ":" in key or Path(key).anchor
+            or any(p in ("..", "") for p in parts)):
         raise ValueError(f"bad storage key {key!r}")
     return key
 

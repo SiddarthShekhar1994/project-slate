@@ -49,7 +49,7 @@ def sync_builtin_lessons(db: Session, directory: Path = BUILTIN_DIR) -> list[str
     """Upsert every built-in lesson that verifies. Returns the slugs loaded."""
     loaded = []
     for path in sorted(directory.glob("*.json")):
-        script = json.loads(path.read_text())
+        script = json.loads(path.read_text(encoding="utf-8"))
         record = verification_record(script)
         if not record["ok"]:
             failures = [c for c in record["checks"] if not c["ok"]]

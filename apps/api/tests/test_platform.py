@@ -121,3 +121,20 @@ def test_blank_voice_list_keeps_the_default_voices(monkeypatch):
         assert provider.model == "eleven_multilingual_v2"
     finally:
         tts.get_provider.cache_clear()
+
+
+@pytest.mark.parametrize("key", ["../x", "tts/../../x", "/etc/passwd", "\\\\server\\share\\x", "C:/Windows/x",
+                                 "tts\\..\\x", ""])
+def test_storage_refuses_keys_that_escape_the_root(tmp_path, key):
+    from slate_api.services.storage import LocalStorage
+
+    with pytest.raises(ValueError):
+        LocalStorage(tmp_path).get(key)
+
+
+def test_storage_round_trip(tmp_path):
+    from slate_api.services.storage import LocalStorage
+
+    store = LocalStorage(tmp_path)
+    store.put("uploads/u1/a.pdf", b"%PDF", "application/pdf")
+    assert store.get("uploads/u1/a.pdf") == b"%PDF" and store.local_path("uploads/u1/a.pdf").is_file()
