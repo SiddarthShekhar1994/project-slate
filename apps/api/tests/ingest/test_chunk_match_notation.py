@@ -44,7 +44,7 @@ def test_notation_detection_and_professor_precedence():
 
 def test_apply_notation_keeps_latex_intact():
     script = json.loads((Path(__file__).resolve().parents[2] / "slate_api/lessons/builtin/"
-                         "calc1.derivatives.chain_rule.json").read_text())
+                         "calc1.derivatives.chain_rule.json").read_text(encoding="utf-8"))
     profile = NotationProfile(derivative="leibniz", log="log", inner="w")
     for step in script["steps"]:
         for action in step["actions"]:

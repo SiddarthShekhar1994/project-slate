@@ -10,7 +10,7 @@ BUILTIN = Path(__file__).resolve().parents[2] / "slate_api" / "lessons" / "built
 
 @pytest.mark.parametrize("path", sorted(BUILTIN.glob("*.json")), ids=lambda p: p.name)
 def test_builtin_lessons_are_sound(path):
-    ok, results = script_is_sound(json.loads(path.read_text()))
+    ok, results = script_is_sound(json.loads(path.read_text(encoding="utf-8")))
     assert ok, [r for r in results if not r.ok]
     assert results, "a lesson should state at least one checkable fact"
 

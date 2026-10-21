@@ -59,7 +59,7 @@ def test_audio_reports_unavailable_without_a_provider(signed_in):
 
 
 def test_unverified_builtin_is_not_loaded(tmp_path):
-    script = json.loads((BUILTIN_DIR / "calc1.derivatives.chain_rule.json").read_text())
+    script = json.loads((BUILTIN_DIR / "calc1.derivatives.chain_rule.json").read_text(encoding="utf-8"))
     bad = copy.deepcopy(script)
     bad["id"] = "broken-lesson"
     bad["steps"][4]["claims"] = [{"kind": "derivative", "of": "sin(u)", "var": "u", "equals": "-cos(u)"}]
