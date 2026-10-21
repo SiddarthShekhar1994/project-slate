@@ -38,11 +38,14 @@ def test_elevenlabs_transcription():
         "what is the inner function"
 
 
+# Named cases: pytest would otherwise name the second case after its 10 MB
+# of audio, which floods the test output and breaks on Windows, where the
+# name has to fit in an environment variable.
 @pytest.mark.parametrize("audio,mime,message", [
     (b"", "audio/webm", "empty"),
     (b"x" * (stt.MAX_AUDIO_BYTES + 1), "audio/webm", "too long"),
     (b"audio", "video/mp4", "kind of recording"),
-])
+], ids=["empty", "too-long", "wrong-kind"])
 def test_bad_recordings_are_explained(audio, mime, message):
     with pytest.raises(stt.STTError, match=message):
         stt.transcribe(audio, mime, stt.FakeSTT())

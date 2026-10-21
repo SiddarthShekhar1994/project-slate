@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 
 from slate_api.services.ingest.extract import ExtractionError, detect_mime, extract
@@ -79,6 +81,7 @@ def test_ocr_prefers_claude_and_sends_the_image():
     assert llm.calls[0][0]["type"] == "image"
 
 
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract binary not installed")
 def test_ocr_falls_back_to_tesseract():
     result = ocr_image(f.chain_rule_png(), llm=NoLLM())
     assert result.method == "tesseract"

@@ -4,7 +4,7 @@
 # to a GitHub Release.
 #
 # The Python tests run on Windows in a job of their own, so a problem there
-# can't hold up or hide the installer.
+# can't hold up the installer.
 name: Windows app
 
 on:
@@ -112,7 +112,7 @@ jobs:
   python-tests:
     name: Python tests on Windows (SQLite)
     runs-on: windows-latest
-    timeout-minutes: 75
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -127,50 +127,12 @@ jobs:
       - name: Install Python packages
         run: uv sync --all-packages --frozen
 
-      # Small parts, each in its own step, so the step list on the run page
-      # shows which part is stuck even while the job is still going. See
-      # run_pytest.py for why pytest doesn't run directly.
-      - name: Collect every test
-        timeout-minutes: 5
-        run: .venv/Scripts/python.exe .github/scripts/run_pytest.py 180 --collect-only -q
-
-      - name: Skills package
-        if: ${{ !cancelled() }}
-        timeout-minutes: 8
-        run: .venv/Scripts/python.exe .github/scripts/run_pytest.py 420 packages/skills/tests
-
-      - name: API sandbox, storage and voice settings
-        if: ${{ !cancelled() }}
-        timeout-minutes: 8
-        run: .venv/Scripts/python.exe .github/scripts/run_pytest.py 420 apps/api/tests/test_platform.py
-
-      - name: API source ingestion and OCR
-        if: ${{ !cancelled() }}
-        timeout-minutes: 8
-        run: .venv/Scripts/python.exe .github/scripts/run_pytest.py 420 apps/api/tests/ingest
-
-      - name: API lessons, lesson scripts and speech
-        if: ${{ !cancelled() }}
-        timeout-minutes: 8
-        run: .venv/Scripts/python.exe .github/scripts/run_pytest.py 420 apps/api/tests/lessons apps/api/tests/lesson_gen
-
-      - name: API photo answers and voice questions
-        if: ${{ !cancelled() }}
-        timeout-minutes: 8
-        run: .venv/Scripts/python.exe .github/scripts/run_pytest.py 420 apps/api/tests/test_stt_photo.py
-
-      - name: API grading, generators and answer checks
-        if: ${{ !cancelled() }}
-        timeout-minutes: 15
-        run: >-
-          .venv/Scripts/python.exe .github/scripts/run_pytest.py 840 apps/api/tests/skills apps/api/tests/verify
-          apps/api/tests/test_grading.py apps/api/tests/test_problem_gen.py apps/api/tests/test_review_and_exam_rules.py
-
-      - name: API against SQLite (the app's database)
-        if: ${{ !cancelled() }}
-        timeout-minutes: 8
+      # A test that runs past five minutes prints every thread's stack and ends the run.
+      - name: Python tests, against SQLite (the app's database)
+        timeout-minutes: 20
         run: |
           tmp="$(cygpath -m "$RUNNER_TEMP")"
           export TEST_DATABASE_URL="sqlite:///$tmp/slate_test.db"
           export STORAGE_DIR="$tmp/slate-test-storage"
-          .venv/Scripts/python.exe .github/scripts/run_pytest.py 420 apps/api/tests/api
+          uv run python -m pytest -v -p no:cacheprovider --durations=15 \
+            -o faulthandler_timeout=300 -o faulthandler_exit_on_timeout=true
