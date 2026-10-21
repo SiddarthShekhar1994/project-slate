@@ -46,7 +46,11 @@ test("starts without sign-in, grades answers, and leaves nothing running when cl
   await expect(window.getByRole("heading", { level: 1 })).toContainText("Welcome", { timeout: 240_000 });
   await expect(window).toHaveURL(/127\.0\.0\.1:\d+\/library/);
   await expect(window.getByRole("link", { name: "Settings" }).first()).toBeVisible();
-  await expect(window.getByText("Everything stays on this computer.")).toBeVisible();
+  // Desktop mode, whatever the window size (small screens get the bottom tab bar
+  // instead of the sidebar): no accounts, nothing to sign in to.
+  const session = await window.evaluate(async () => (await fetch("/api/auth/session")).json());
+  expect(session.desktop).toBe(true);
+  await expect(window.getByRole("link", { name: /sign in/i })).toHaveCount(0);
 
   await window.getByRole("link", { name: "Settings" }).first().click();
   await expect(window.getByRole("heading", { name: "API keys" })).toBeVisible();
