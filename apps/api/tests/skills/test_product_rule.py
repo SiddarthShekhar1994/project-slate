@@ -40,6 +40,7 @@ def pattern(tag: str, note_contains: str = ""):
 SIGNATURE = pattern("product_of_derivatives", "Multiplying them")
 DROP_LAST = pattern("product_rule_missing_term", "[[last_colored]]")
 DROP_FIRST = pattern("product_rule_missing_term", "[[f:yellow]]")
+DROP_MIDDLE = pattern("product_rule_missing_term", "[[g:mint]]")
 GROUPED = pattern("product_of_derivatives", "Treating")
 SUBTRACTED = pattern("sign_error")
 TRIG_SIGN = pattern("trig_derivative_sign")
@@ -47,6 +48,10 @@ LN_AS_ONE = pattern("exp_log_derivative_error", "ln x")
 EXP_AS_POWER = pattern("exp_log_derivative_error", "e^x$ is not")
 COEFFICIENT_DROPPED = pattern("power_coefficient_dropped")
 EXPONENT_SLIP = pattern("negative_exponent_slip")
+
+
+def built_names(built) -> list[str]:
+    return [str(built.parts[k]) for k in ("f", "g", "h")]
 
 
 # --- hand-checked keys ----------------------------------------------------------
@@ -69,6 +74,9 @@ SYMBOLIC_EXAMPLES = [
     ("sqrt_transcendental", {"k": 2, "other": "ln"}, (L + 2) / sp.sqrt(x)),
     ("transcendental_pair", {"pair": ["exp", "sin"]}, E * (S + C)),
     ("transcendental_pair", {"pair": ["sin", "cos"]}, C**2 - S**2),
+    # -2 ln x cos x and -2 sqrt(x) sin x: a constant in front
+    ("transcendental_pair", {"a": -2, "pair": ["ln", "cos"]}, -2 * C / x + 2 * L * S),
+    ("sqrt_transcendental", {"k": -2, "other": "sin"}, -(S + 2 * x * C) / sp.sqrt(x)),
     # d4: x^2 e^x sin x, x^(-2) e^x, 2x^(3/2) ln x, x^(2/3) cos x
     ("triple", {"a": 1, "n": 2, "pair": ["exp", "sin"]}, 2 * x * E * S + x**2 * E * S + x**2 * E * C),
     ("triple", {"a": 2, "n": 1, "pair": ["sin", "cos"]}, 2 * S * C + 2 * x * C**2 - 2 * x * S**2),
@@ -123,6 +131,15 @@ def test_factors_named_in_the_order_the_student_sees_them():
     assert built.parts["f"] == E and built.parts["g"] == S
 
 
+def test_constant_goes_with_the_first_factor_shown():
+    # 3 e^x sin x: f is 3 e^x, whichever order the pair was sampled in.
+    for pair in (["sin", "exp"], ["exp", "sin"]):
+        built = build("transcendental_pair", {"a": 3, "pair": pair})
+        assert built.prompt == r"Differentiate $y = 3 e^{x} \sin{\left(x \right)}$."
+        assert built.parts["f"] == 3 * E and built.parts["g"] == S
+        assert same(built.key, 3 * E * (S + C))
+
+
 def test_negative_power_is_written_as_a_power():
     built = build("power_transcendental", {"a": 3, "r": [-2, 1], "other": "sin"})
     assert "3 x^{-2}" in built.prompt and r"\frac" not in built.prompt
@@ -169,17 +186,25 @@ def test_missing_term_patterns():
     assert DROP_LAST.buggy(built) is None
     assert same(DROP_FIRST.buggy(built), 2 * x**3 * E)
 
-    # Three factors: forgot the h' term, or the f' term.
+    # Three factors: forgot the h' term, the f' term, or the g' term.
     triple = build("triple", {"a": 1, "n": 2, "pair": ["exp", "sin"]})
     assert same(DROP_LAST.buggy(triple), 2 * x * E * S + x**2 * E * S)
     assert same(DROP_FIRST.buggy(triple), x**2 * E * S + x**2 * E * C)
+    assert same(DROP_MIDDLE.buggy(triple), 2 * x * E * S + x**2 * E * C)
+    assert DROP_MIDDLE.buggy(build("mono_trig", {"a": 3, "n": 2, "trig": "sin"})) is None
 
 
 def test_grouped_product_of_derivatives():
-    # (x^2 (e^x sin x))' with (e^x sin x)' taken as e^x cos x.
-    triple = build("triple", {"a": 1, "n": 2, "pair": ["exp", "sin"]})
-    assert same(GROUPED.buggy(triple), 2 * x * E * S + x**2 * E * C)
+    # (x^2 (ln x sin x))' with (ln x sin x)' taken as (1/x) cos x.
+    triple = build("triple", {"a": 1, "n": 2, "pair": ["sin", "ln"]})
+    assert built_names(triple) == ["x**2", "log(x)", "sin(x)"]
+    assert same(GROUPED.buggy(triple), 2 * x * L * S + x * C)
     assert GROUPED.buggy(build("two_linear", {"f": [2, 1], "g": [3, -4]})) is None
+    # With e^x in the group, (e^x sin x)' as e^x cos x is just the dropped g' term,
+    # so the missing-term pattern names it instead.
+    triple = build("triple", {"a": 1, "n": 2, "pair": ["exp", "sin"]})
+    assert GROUPED.buggy(triple) is None
+    assert same(DROP_MIDDLE.buggy(triple), 2 * x * E * S + x**2 * E * C)
 
 
 def test_subtracted_terms():
@@ -209,6 +234,10 @@ def test_exp_and_log_derivative_errors():
     assert same(EXP_AS_POWER.buggy(built), 6 * x**2 * E + 2 * x**4 * sp.exp(x - 1))
     assert LN_AS_ONE.buggy(built) is None
     assert EXP_AS_POWER.buggy(build("poly_ln", {"poly": [1, -3, 0]})) is None
+    # 3 e^x ln x: the constant stays in front of the wrong derivative.
+    built = build("transcendental_pair", {"a": 3, "pair": ["exp", "ln"]})
+    assert same(EXP_AS_POWER.buggy(built), 3 * x * sp.exp(x - 1) * L + 3 * E / x)
+    assert same(LN_AS_ONE.buggy(built), 3 * E * L + 3 * E)
 
 
 def test_power_rule_slips_on_power_factors():
@@ -239,6 +268,34 @@ def test_point_problem_mistakes_are_numbers():
     # l = t + 2, w = 2t + 1, h = t + 3 at t = 1: 1 * 3 * 4 + 3 * (2 * 1)
     built = build("word_box", {"dims": [[1, 2], [2, 1], [1, 3]], "t0": 1})
     assert GROUPED.buggy(built) == 18
+    # Leaving out l w' h: 1 * 3 * 4 + 3 * 3 * 1
+    assert DROP_MIDDLE.buggy(built) == 21
+    # The note names w h in the order the student sees them, not SymPy's (t + 3)(2t + 1).
+    assert render("[[rest]]", built) == r"\left(2 t + 1\right) \left(t + 3\right)"
+
+
+def test_point_problems_with_ambiguous_mistakes_are_rejected():
+    # w = t + 1, h = t^2 + 3 at t = 1: w'h = 4 and wh' = 4, so dropping either
+    # term gives the same number and the grader could not tell which happened.
+    with pytest.raises(ValueError):
+        build("word_rectangle", {"w": [1, 1], "h": [1, 0, 3], "t0": 1})
+
+
+def test_samplers_avoid_ambiguous_problems():
+    for seed in range(200):
+        params = SKILL.family("two_linear").sample(Random(seed))
+        (a, b), (c, d) = params["f"], params["g"]
+        assert a * d != b * c and a * c != a * d - b * c
+        dims = SKILL.family("word_box").sample(Random(seed))["dims"]
+        assert all(p * s != q * r for i, (p, q) in enumerate(dims) for r, s in dims[i + 1:])
+
+
+def test_word_problem_units_are_consistent():
+    built = build("word_revenue", {"price": [-2, 30], "sales": [8, 50], "t0": 4})
+    assert "revenue from one show" in built.prompt and "dollars per week" in built.prompt
+    assert built.word.unit == "dollars per week"
+    # The power-rule note points at 8 sqrt(t), not at the whole factor 8 sqrt(t) + 50.
+    assert built.snippets["power_factor"] == r"8 \sqrt{t}"
 
 
 def test_mistake_tags_exist_and_notes_render():
@@ -268,6 +325,10 @@ def test_family_sweep_verifies(family):
         json.dumps(built.params)
         report = verify_built(SKILL, built)
         assert report.ok, f"{family.id} seed {seed}: {[(c.name, c.detail) for c in report.failures]}"
+        if built.at is not None:
+            # Every mistake on a point problem gives its own number, none of them the key.
+            wrong = [w for w in (m.buggy(built) for m in SKILL.mistakes) if w is not None]
+            assert len(set(wrong)) == len(wrong) and built.key not in wrong
         # build is pure: the same params give the same problem.
         again = family.build(params)
         assert again.key == built.key and again.prompt == built.prompt

@@ -12,6 +12,7 @@ from random import Random
 import pytest
 import sympy as sp
 from slate_api.services.verify import equivalent, verify_built
+from slate_api.services.verify.equivalence import numeric_screen
 from slate_skills import load_skill_module
 from slate_skills.core.mistakes import mistake_type
 
@@ -225,6 +226,43 @@ def test_point_problems_reject_invisible_signature_mistakes():
         build("word_velocity", {"story": "particle", "terms": [[1, 3], [-4, 2], [1, 1]], "t0": 2})
 
 
+@pytest.mark.parametrize("family_id,params", [
+    # (2x - 2)/sqrt(x) = 2x^(1/2) - 2x^(-1/2): leaving both exponents alone gives
+    # x^(1/2) + x^(-1/2), and so does moving -1/2 toward zero.
+    ("split_root_fraction", {"root": "1/2", "num": [[2, 1], [-2, 0]]}),
+    # h = 6 sqrt(t) + 3 at t = 4: 6 t^(-1/2) and 3 t^0 are both 3.
+    ("word_growth", {"a": 6, "b": 3, "t0": 4}),
+    # h = -5t^2 + 30t + 13 at t = 2: -10(4) + 60 and -5(2) + 30 are both 20.
+    ("word_velocity", {"story": "ball", "terms": [[-5, 2], [30, 1], [13, 0]], "t0": 2}),
+])
+def test_ambiguous_mistakes_are_rejected(family_id, params):
+    with pytest.raises(ValueError, match="same answer"):
+        build(family_id, params)
+
+
+def test_constant_that_would_cancel_is_rejected():
+    # -x^3 + 7x - 7: keeping the -7 gives -3x^2, which reads as a dropped 7, not a kept constant.
+    with pytest.raises(ValueError, match="cancel"):
+        build("polynomial", {"terms": [[-1, 3], [7, 1], [-7, 0]]})
+
+
+def test_titles_match_the_number_of_terms():
+    single = build("single_power", {"terms": [[5, 3]]})
+    assert [st.title for st in single.steps] == ["Spot the exponent", "Apply the power rule", "Simplify"]
+    poly = build("polynomial", {"terms": [[3, 4], [-5, 2], [7, 0]]})
+    assert [st.title for st in poly.steps] == [
+        "Spot the exponent on each term", "Apply the power rule to each term", "Simplify each term"]
+
+
+def test_fraction_coefficients_get_a_rewrite_step():
+    # x^6/6 + 3x^2/2 shows as fractions, so the first step rewrites it as (1/6) x^6 + (3/2) x^2.
+    built = build("rational_coefficients", {"terms": [["1/6", 6], ["3/2", 2]]})
+    assert built.steps[0].title == "Rewrite each term as a power of $x$"
+    assert "\\frac{x^{6}}{6}" in built.steps[0].latex
+    assert "\\frac{1}{6} x^{\\htmlClass{slate-yellow}{6}}" in built.steps[0].latex
+    assert same(built.key, x**5 + 3 * x)
+
+
 # --- every family, many seeds ------------------------------------------------------
 
 
@@ -235,15 +273,38 @@ def test_difficulty_coverage():
     assert sum(len(SKILL.families_at(d, word=True)) for d in (1, 2, 3, 4)) >= 3
 
 
+def _tag_clashes(built) -> list[str]:
+    """Pairs of different mistake tags whose answers the numeric screen cannot tell apart."""
+    symbols = () if built.at else built.symbols
+    answers = [(m.tag, w) for m in SKILL.mistakes if (w := m.buggy(built)) is not None]
+    clashes = []
+    for i, (tag_a, a) in enumerate(answers):
+        for tag_b, b in answers[i + 1:]:
+            if tag_a != tag_b and numeric_screen(a, b, symbols)[0] is not False:
+                clashes.append(f"{tag_a} == {tag_b}")
+    return clashes
+
+
 @pytest.mark.parametrize("family", SKILL.families, ids=lambda f: f.id)
 def test_family_sweep(family):
-    for seed in range(40):
-        params = family.sample(Random(seed))
-        stored = json.loads(json.dumps(params))
-        built = family.build(stored)
+    # build may reject a rare sample (the generator resamples), so collect 40
+    # problems and allow only a few rejections on the way.
+    verified, rejected = 0, 0
+    for seed in range(44):
+        stored = json.loads(json.dumps(family.sample(Random(seed))))
+        try:
+            built = family.build(stored)
+        except ValueError:
+            rejected += 1
+            continue
         report = verify_built(SKILL, built)
         assert report.ok, f"{family.id} seed {seed}: {[(c.name, c.detail) for c in report.failures]}"
+        assert not _tag_clashes(built), f"{family.id} seed {seed}: {_tag_clashes(built)}"
         # build is a pure function of the stored params
         again = family.build(json.loads(json.dumps(built.params)))
         assert again.key == built.key and again.prompt == built.prompt
         assert built.family == family.id and built.difficulty == family.difficulty
+        verified += 1
+        if verified == 40:
+            break
+    assert verified == 40, f"{family.id}: {rejected} rejected builds before 40 good ones"
