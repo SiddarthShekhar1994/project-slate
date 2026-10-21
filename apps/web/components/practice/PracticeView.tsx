@@ -6,6 +6,7 @@ import { MathText } from "@/components/shared/math/MathText";
 import { Spinner } from "@/components/shared/ui/Spinner";
 import { STATUS_LABELS, StatusPill } from "@/components/shared/ui/StatusPill";
 import { ApiError, api } from "@/lib/api";
+import { replaceQuery } from "@/lib/urlState";
 import type { Grade, Worksheet, WorksheetItem, WorksheetStats } from "@/lib/types";
 import { EndScreen } from "./EndScreen";
 import { ProblemCard } from "./ProblemCard";
@@ -56,12 +57,11 @@ export function PracticeView({ worksheetId }: { worksheetId: string }) {
   const validRequest = !!sheet && Number.isInteger(requested) && requested >= 1 && requested <= sheet.items.length;
   const selected = validRequest ? requested - 1 : (landing ?? 0);
 
-  const select = useCallback(
-    (position: number) => {
-      router.replace(`/practice/${worksheetId}?problem=${position + 1}`, { scroll: false });
-    },
-    [router, worksheetId],
-  );
+  // A shallow URL update: Next keeps useSearchParams in sync with
+  // history.replaceState, so switching problems needs no server round trip.
+  const select = useCallback((position: number) => {
+    replaceQuery({ problem: String(position + 1) });
+  }, []);
 
   // Keep the URL in step with what is on screen.
   useEffect(() => {

@@ -49,12 +49,14 @@ export function AnswerInput({ variables, answerKind, disabled, busy, blocked, on
     if (autoFocus) inputRef.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
+  // A new array arrives with every worksheet update; only a change of names matters.
+  const variableKey = variables.join(",");
   useEffect(() => {
     if (!text.trim()) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       api
-        .preview(text, variables, controller.signal)
+        .preview(text, variableKey.split(","), controller.signal)
         .then((result) => setPreview({ text, result }))
         .catch(() => undefined);
     }, 220);
@@ -62,7 +64,7 @@ export function AnswerInput({ variables, answerKind, disabled, busy, blocked, on
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [text, variables]);
+  }, [text, variableKey]);
 
   function insert(snippet: string, caret: number) {
     const input = inputRef.current;

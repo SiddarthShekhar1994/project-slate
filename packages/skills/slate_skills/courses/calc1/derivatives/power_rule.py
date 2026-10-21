@@ -188,7 +188,10 @@ def build_power(*, family: str, difficulty: int, var: sp.Symbol, terms: list[Ter
         if len(shown) != len(terms):
             raise ValueError("two terms merged into one; resample")
         terms = shown
-        form = "poly" if all(n.is_integer and n >= 0 for _, n in terms) else "powers"
+        # "poly" when the student already sees every term as a number times a
+        # power; roots, 1/x^n and fractions such as x^6/6 need rewriting first.
+        written = join_terms([tex_power(a, n, var) for a, n in terms])
+        form = "poly" if written.replace(" ", "") == tex(expr).replace(" ", "") else "powers"
     if form is None:
         raise ValueError("an unexpanded expression needs a form")
     if len({n for _, n in terms}) != len(terms):
@@ -205,6 +208,12 @@ def build_power(*, family: str, difficulty: int, var: sp.Symbol, terms: list[Ter
     negative = next((term for term in terms if term[1] < 0), focus)
     fractional = next((term for term in terms if not term[1].is_integer), focus)
     constant = sp.Add(*[a for a, n in terms if n == 0])
+    # A kept constant that cancels the derivative's own constant term (from
+    # 7x - 7, say) leaves an answer that looks like a dropped term, and the
+    # note about constants would point the student at the wrong thing.
+    if at is None and constant != 0 and len(sp.Add.make_args(derivative + constant)) < len(
+            sp.Add.make_args(derivative)):
+        raise ValueError("a kept constant would cancel a term of the derivative; resample")
 
     parts = {
         "power_form": _sum(terms, var),
@@ -227,10 +236,14 @@ def build_power(*, family: str, difficulty: int, var: sp.Symbol, terms: list[Ter
     }
 
     powers = join_terms([tex_power(a, n, var, color="yellow") for a, n in terms])
+    each = " to each term" if len(terms) > 1 else ""
     if form == "poly":
-        rewrite_title, rewrite = "Spot the exponent on each term", rf"{fx} = {powers}"
+        rewrite_title = "Spot the exponent on each term" if len(terms) > 1 else "Spot the exponent"
+        rewrite = rf"{fx} = {powers}"
     elif form == "powers":
-        rewrite_title, rewrite = f"Rewrite each term as a power of ${v}$", rf"{fx} = {tex(expr)} = {powers}"
+        rewrite_title = (f"Rewrite each term as a power of ${v}$" if len(terms) > 1
+                         else f"Write it as a number times a power of ${v}$")
+        rewrite = rf"{fx} = {tex(expr)} = {powers}"
     elif form == "quotient":
         rewrite_title = f"Split the fraction into powers of ${v}$"
         rewrite = rf"{fx} = {tex(expr)} = {middle} = {powers}"
@@ -250,11 +263,12 @@ def build_power(*, family: str, difficulty: int, var: sp.Symbol, terms: list[Ter
         Step(id="rewrite", title=rewrite_title, latex=rewrite),
         Step(
             id="power_rule",
-            title="Apply the power rule to each term",
+            title=f"Apply the power rule{each}",
             latex=rf"{fprime} = " + " + ".join(tex_power_rule(a, n, var) for a, n in terms),
             expr=derivative,
         ),
-        Step(id="simplify", title="Simplify each term", latex=rf"{fprime} = {tidy}", expr=derivative),
+        Step(id="simplify", title="Simplify each term" if each else "Simplify", latex=rf"{fprime} = {tidy}",
+             expr=derivative),
     ]
 
     key = derivative
@@ -277,7 +291,7 @@ def build_power(*, family: str, difficulty: int, var: sp.Symbol, terms: list[Ter
 
     prompt = f"{word.text} {word.question}" if word is not None else rf"Differentiate ${fx} = {tex(expr)}$."
 
-    return Built(
+    built = Built(
         family=family,
         difficulty=difficulty,
         task="differentiate",
@@ -292,6 +306,30 @@ def build_power(*, family: str, difficulty: int, var: sp.Symbol, terms: list[Ter
         word=word,
         snippets=snippets,
     )
+    _require_distinct_mistakes(built)
+    return built
+
+
+def _require_distinct_mistakes(b: Built) -> None:
+    """Reject a problem where two different mistakes lead to the same answer.
+
+    The grader reports the first pattern that matches, so a collision would
+    tell some students about a mistake they did not make. It happens for
+    structural reasons (``3x^{1/2} - 3x^{-1/2}`` gives the same answer whether
+    the exponents are left alone or the negative one moves toward zero) and,
+    more often, by coincidence at a single point. Every buggy answer here is a
+    sum of powers, a number, or a product that expands to one, so ``expand``
+    decides equality exactly. ``MISTAKES`` is defined further down.
+    """
+    seen: list[tuple[str, sp.Expr]] = []
+    for pattern in MISTAKES:
+        wrong = pattern.buggy(b)
+        if wrong is None:
+            continue
+        for tag, other in seen:
+            if tag != pattern.tag and sp.expand(wrong - other) == 0:
+                raise ValueError(f"{tag} and {pattern.tag} give the same answer; resample")
+        seen.append((pattern.tag, wrong))
 
 
 def build_quotient(*, family: str, difficulty: int, var: sp.Symbol, numerator: list[Term], den: sp.Rational,
@@ -346,9 +384,15 @@ def _sum_family(id: str, difficulty: int):
     return build
 
 
+def _constant(rng: Random, terms: list) -> list:
+    """A constant term that does not cancel the derivative of a linear term
+    (``7x - 7``), which build_power would reject."""
+    return [nonzero_int(rng, -9, 9, exclude=[-a for a, n in terms if n == 1]), 0]
+
+
 def _maybe_constant(rng: Random, terms: list, chance: float = 0.5) -> list:
     if rng.random() < chance:
-        terms.append([nonzero_int(rng, -9, 9), 0])
+        terms.append(_constant(rng, terms))
     return terms
 
 
@@ -361,7 +405,8 @@ def _sample_single_power(rng: Random) -> Params:
 def _sample_polynomial(rng: Random) -> Params:
     m = rng.randint(2, 5)
     k = rng.randint(1, m - 1)
-    return {"terms": [[nonzero_int(rng, -6, 6), m], [nonzero_int(rng, -9, 9), k], [nonzero_int(rng, -9, 9), 0]]}
+    terms = [[nonzero_int(rng, -6, 6), m], [nonzero_int(rng, -9, 9), k]]
+    return {"terms": [*terms, _constant(rng, terms)]}
 
 
 # d2 ----------------------------------------------------------------------------
@@ -529,7 +574,7 @@ _SHAPES: dict[str, tuple] = {
 
 
 def _sample_word_geometry(rng: Random) -> Params:
-    return {"shape": pick(rng, sorted(_SHAPES)), "x0": rng.randint(2, 6)}
+    return {"shape": pick(rng, sorted(_SHAPES)), "x0": rng.randint(2, 8)}
 
 
 def _build_word_geometry(p: Params) -> Built:
@@ -548,8 +593,10 @@ _PLANT = (
 
 
 def _sample_word_growth(rng: Random) -> Params:
-    # Perfect-square days keep sqrt(t0) whole.
-    return {"a": pick(rng, [4, 6, 8, 10, 12]), "b": rng.randint(2, 15), "t0": pick(rng, [4, 9, 16, 25, 36])}
+    # Perfect-square days keep sqrt(t0) whole. Day 4 is left out: there
+    # a t^(-1/2) and (a/2) t^0 are both a/2, so dropping the brought-down 1/2
+    # and taking 1 off the exponent's numerator would give the same number.
+    return {"a": pick(rng, [4, 6, 8, 10, 12]), "b": rng.randint(2, 15), "t0": pick(rng, [9, 16, 25, 36])}
 
 
 def _build_word_growth(p: Params) -> Built:

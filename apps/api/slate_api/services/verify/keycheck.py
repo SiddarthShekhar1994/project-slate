@@ -21,6 +21,7 @@ Checks:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 import sympy as sp
@@ -201,17 +202,35 @@ def _check_mistakes(skill: SkillSpec, built: Built) -> tuple[Check, Check]:
     return mistakes, signature
 
 
+# Math written as plain text outside $...$: carets, d/dx, sqrt(, LaTeX commands, x*y.
+_PLAIN_MATH = re.compile(r"\b[a-z]'+\(|\^|\bd[a-z]?/d[a-z]\b|\bsqrt\(|\\[a-zA-Z]+|\b[a-z0-9]\*[a-z0-9(]")
+
+
+def plain_text_math(text: str) -> str | None:
+    """The first piece of math written outside ``$...$`` in ``text``, if any.
+
+    The UI renders all math with KaTeX, so student-facing text must keep its
+    math between dollar signs.
+    """
+    outside = re.sub(r"\$\$.*?\$\$|\$[^$]*\$", " ", text)
+    match = _PLAIN_MATH.search(outside)
+    return match.group(0) if match else None
+
+
 def _check_text(skill: SkillSpec, built: Built) -> Check:
     try:
         ladder = skill.hint_ladder(built)
-        for template in (ladder.nudge, ladder.bigger, ladder.full_step):
-            render(template, built)
-        for pattern in skill.mistakes:
-            render(pattern.note, built)
-        for step in built.steps:
-            render(step.title, built)
+        texts = [("prompt", built.prompt)]
+        texts += [(f"hint {i + 1}", render(t, built)) for i, t in
+                  enumerate((ladder.nudge, ladder.bigger, ladder.full_step))]
+        texts += [(f"note {p.tag}", render(p.note, built)) for p in skill.mistakes]
+        texts += [(f"step {st.id}", render(st.title, built)) for st in built.steps]
     except (KeyError, ValueError) as exc:
         return Check("text", False, f"template error: {exc}")
+    for where, text in texts:
+        found = plain_text_math(text)
+        if found:
+            return Check("text", False, f"{where} has math outside $...$ near {found!r}")
     if len(built.prompt) > MAX_PROMPT_CHARS:
         return Check("text", False, "prompt too long")
     if built.prompt.count("$") % 2:

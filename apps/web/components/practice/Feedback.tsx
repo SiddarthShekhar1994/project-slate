@@ -13,6 +13,11 @@ type Props = {
   busy?: boolean;
 };
 
+/** "Dropped inner derivative" reads as "dropped inner derivative" mid-sentence; math is left alone. */
+function lowerFirst(text: string): string {
+  return text.startsWith("$") ? text : text.charAt(0).toLowerCase() + text.slice(1);
+}
+
 /** Result of the last check. Lives in an aria-live region so it is announced. */
 export function Feedback({ grade, solution, onSimilar, onNext, busy }: Props) {
   if (!grade) return null;
@@ -83,7 +88,7 @@ export function Feedback({ grade, solution, onSimilar, onNext, busy }: Props) {
             Where to look{mistake.step_title ? <> · <MathText text={mistake.step_title} /></> : null}
           </p>
           <MathText as="p" text={mistake.where_to_look} className="text-sm leading-relaxed text-text" />
-          <p className="text-xs text-muted">Likely mistake: {mistake.label.toLowerCase()}</p>
+          <MathText as="p" className="text-xs text-muted" text={`Likely mistake: ${lowerFirst(mistake.label)}`} />
         </div>
       )}
       {onSimilar && (

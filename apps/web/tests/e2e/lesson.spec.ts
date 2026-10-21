@@ -26,9 +26,13 @@ test.describe("lesson player", () => {
   });
 
   test("keyboard: arrows change step and c toggles captions, reflected in the URL", async ({ page }) => {
+    // Shortcuts are scoped to the player; outside it they do nothing.
     await page.locator("body").press("ArrowRight");
+    await expect(page).toHaveURL(/step=1/);
+    await page.getByRole("region", { name: /Board for step 1/ }).locator("..").focus();
+    await page.keyboard.press("ArrowRight");
     await expect(page).toHaveURL(/step=2/);
-    await page.locator("body").press("c");
+    await page.keyboard.press("c");
     await expect(page).toHaveURL(/cc=0/);
     await expect(page.getByRole("button", { name: /Captions off/ })).toHaveAttribute("aria-pressed", "false");
   });

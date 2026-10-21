@@ -4,6 +4,9 @@ Skill files reference these tags from their :class:`MistakePattern` entries.
 The grader in ``apps/api`` stores one tag per wrong answer, and the Progress
 page ranks tags by how often they occur, grouped under ``category``.
 
+Labels and descriptions are shown to students, so any math in them is
+written as ``$...$`` LaTeX.
+
 Generic tags (``sign_error``, ``coefficient_slip``, ``dropped_term``,
 ``algebra_slip``, ``unclassified``) are detected by the grader itself after the
 skill-specific patterns have been tried.
@@ -48,30 +51,30 @@ _TYPES = [
                 "Left a constant term in the derivative."),
     # Product rule
     MistakeType("product_of_derivatives", "Multiplied the derivatives", "rule",
-                "Wrote (fg)' = f'g' instead of f'g + fg'."),
+                "Wrote $(fg)' = f'g'$ instead of $f'g + fg'$."),
     MistakeType("product_rule_missing_term", "Product rule missing a term", "rule",
                 "Kept only one of the two product-rule terms."),
     # Quotient rule
     MistakeType("quotient_numerator_swapped", "Quotient rule terms swapped", "sign",
                 "Subtracted in the wrong order in the numerator, which flips the sign."),
     MistakeType("quotient_denominator_not_squared", "Denominator not squared", "rule",
-                "Divided by g instead of g squared."),
+                "Divided by $g$ instead of $g^2$."),
     MistakeType("quotient_as_derivative_ratio", "Divided the derivatives", "rule",
-                "Wrote (f/g)' = f'/g'."),
+                "Wrote $(f/g)' = f'/g'$."),
     MistakeType("quotient_plus_instead_of_minus", "Plus instead of minus in quotient rule", "sign",
                 "Added the two numerator terms instead of subtracting."),
     # Implicit differentiation
-    MistakeType("implicit_missing_dydx", "Missing dy/dx on y terms", "rule",
-                "Differentiated y terms as if y were a constant or as if d/dx of y^n were n y^(n-1) with no dy/dx."),
+    MistakeType("implicit_missing_dydx", "Missing $\\frac{dy}{dx}$ on $y$ terms", "rule",
+                "Differentiated $y$ terms as if $y$ were a constant, writing $n y^{n-1}$ for $\\frac{d}{dx} y^n$ with no $\\frac{dy}{dx}$."),
     MistakeType("implicit_product_rule_missed", "Product rule missed on a mixed term", "rule",
-                "Differentiated a term like xy without the product rule."),
-    MistakeType("implicit_isolation_error", "Slip while isolating dy/dx", "algebra",
-                "Collected or divided the dy/dx terms incorrectly."),
+                "Differentiated a term like $xy$ without the product rule."),
+    MistakeType("implicit_isolation_error", "Slip while isolating $\\frac{dy}{dx}$", "algebra",
+                "Collected or divided the $\\frac{dy}{dx}$ terms incorrectly."),
     # Trig and exponential basics that show up inside other rules
     MistakeType("trig_derivative_sign", "Trig derivative sign", "sign",
-                "Got the sign of d/dx sin or d/dx cos backwards."),
+                "Got the sign of $\\frac{d}{dx}\\sin x$ or $\\frac{d}{dx}\\cos x$ backwards."),
     MistakeType("exp_log_derivative_error", "Exponential or log derivative error", "rule",
-                "Used the wrong derivative for e^x or ln x."),
+                "Used the wrong derivative for $e^x$ or $\\ln x$."),
     # Generic, detected by the grader
     MistakeType("sign_error", "Sign error", "sign",
                 "Right structure, but the sign of the answer or of one term is flipped."),

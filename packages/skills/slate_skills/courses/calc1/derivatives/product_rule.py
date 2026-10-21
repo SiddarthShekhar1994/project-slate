@@ -17,12 +17,18 @@ Parts available to notes and hints:
 ``rest`` / ``rest_primes``               the factors after ``f``, and the product of their derivatives
 ``assembled``                            the sum of the product-rule terms before tidying
 
-Snippets: ``rule`` (the rule in the problem's own letters), ``primes_product``
-(the factor derivatives multiplied, coloured), ``last_colored`` (the last factor
-in its step colour), and ``power_factor``, ``power_exponent`` and
-``power_exponent_step`` for the first power of the variable among the factors.
-A factor with a negative or fractional exponent also overrides its
-``f``/``f_prime`` entry so it prints as ``x^{-2}`` rather than as a fraction.
+Snippets: ``rule`` (the rule in the problem's own letters), ``rest`` (overrides
+the part so the factors keep their on-screen order), ``primes_product`` (the
+factor derivatives multiplied, coloured), ``last_colored`` (the last factor in
+its step colour), and ``power_factor``, ``power_exponent`` and
+``power_exponent_step`` for the first power of the variable among the factors
+(``k sqrt(t)`` for a factor ``k sqrt(t) + c``). A factor with a negative or
+fractional exponent also overrides its ``f``/``f_prime`` entry so it prints as
+``x^{-2}`` rather than as a fraction.
+
+For a word problem, a sample where two mistake patterns (or a pattern and the
+key) give the same number is rejected, since the grader could not tell which
+mistake was made.
 """
 
 from __future__ import annotations
@@ -78,6 +84,7 @@ def factor_for(spec: str | list, v: sp.Symbol) -> tuple[sp.Expr, sp.Expr, str]:
     """Decode a factor spec into ``(factor, derivative, kind)``.
 
     ``"sin"``, ``"cos"``, ``"exp"`` and ``"ln"`` are table functions,
+    ``["scale", a, "sin"]`` is ``a sin v`` (any table function),
     ``["poly", [a, b, c]]`` is ``a v^2 + b v + c``, ``["mono", a, n]`` is
     ``a v^n``, ``["pow", a, p, q]`` is ``a v^(p/q)`` and ``["root", k, c]`` is
     ``k sqrt(v) + c``.
@@ -86,6 +93,9 @@ def factor_for(spec: str | list, v: sp.Symbol) -> tuple[sp.Expr, sp.Expr, str]:
         f, fp = _basic(spec, v)
         return f, fp, spec
     kind = spec[0]
+    if kind == "scale":
+        f, fp = _basic(spec[2], v)
+        return spec[1] * f, spec[1] * fp, spec[2]
     if kind == "poly":
         coeffs = spec[1]
         return poly_from(coeffs, v), poly_from(_power_rule_coeffs(coeffs), v), kind
@@ -102,7 +112,15 @@ def factor_for(spec: str | list, v: sp.Symbol) -> tuple[sp.Expr, sp.Expr, str]:
 
 
 def _kind(spec: str | list) -> str:
-    return spec if isinstance(spec, str) else spec[0]
+    """``"sin"``, ``"poly"``, ``"root"`` and so on; a scaled table function reports its function."""
+    if isinstance(spec, str):
+        return spec
+    return spec[2] if spec[0] == "scale" else spec[0]
+
+
+def _scale(spec: str | list) -> int:
+    """The constant in front of a scaled table function, 1 for anything else."""
+    return spec[1] if not isinstance(spec, str) and spec[0] == "scale" else 1
 
 
 def _exponent(spec: str | list) -> sp.Rational | None:
@@ -175,6 +193,12 @@ def _display_order(expr: sp.Expr, decoded: list[tuple]) -> list[tuple]:
         return shown.index(core)
 
     return sorted(decoded, key=position)
+
+
+def _in_display_order(specs: list, v: sp.Symbol) -> list:
+    """``specs`` sorted the way SymPy prints the product of their factors."""
+    decoded = [(*factor_for(s, v), s) for s in specs]
+    return [d[3] for d in _display_order(sp.Mul(*[d[0] for d in decoded]), decoded)]
 
 
 TIDY: dict[str, Callable[[sp.Expr, sp.Symbol], sp.Expr]] = {
@@ -265,11 +289,17 @@ def build_product(*, family: str, difficulty: int, var: sp.Symbol, specs: list, 
 
     power_idx = next((i for i, s in enumerate(shown) if _exponent(s) is not None), 0)
     r = _exponent(shown[power_idx])
+    power_factor = f_tex[power_idx]
+    if _kind(shown[power_idx]) == "root":
+        # Point at k sqrt(t) itself, not at k sqrt(t) + c.
+        power_factor = tex(shown[power_idx][1] * sp.sqrt(var))
     snippets.update({
         "rule": rule,
+        # The factors after f in the order the student sees them (SymPy would reorder the product).
+        "rest": " ".join(_piece(f_tex[i], fs[i], None, i == 1) for i in range(1, n)),
         "primes_product": _product_tex(der, first=True),
         "last_colored": highlight(f_tex[-1], colors[-1]) if colors[-1] else f_tex[-1],
-        "power_factor": f_tex[power_idx],
+        "power_factor": power_factor,
         "power_exponent": _exponent_tex(r) if r is not None else "n",
         "power_exponent_step": (
             rf"{_exponent_tex(r)} - 1 = {_exponent_tex(r - 1)}" if r is not None else "n - 1"
@@ -316,8 +346,6 @@ def build_product(*, family: str, difficulty: int, var: sp.Symbol, specs: list, 
         key_out = _terms(fv, dv)
         if key_out == 0:
             raise ValueError("a zero rate makes a poor question; resample")
-        if sp.Mul(*dv) == key_out:
-            raise ValueError("multiplying the derivatives gives the right number here; resample")
         fac_v = [(tex(fv[i]), fv[i], colors[i]) for i in range(n)]
         der_v = [(tex(dv[i]), dv[i], colors[i]) for i in range(n)]
         num_tex = " + ".join(
@@ -336,7 +364,7 @@ def build_product(*, family: str, difficulty: int, var: sp.Symbol, specs: list, 
         shown_tex = " ".join(f_tex) if keep_order else tex(expr)
         prompt = rf"Differentiate ${fn} = {shown_tex}$."
 
-    return Built(
+    built = Built(
         family=family,
         difficulty=difficulty,
         task="differentiate",
@@ -351,6 +379,13 @@ def build_product(*, family: str, difficulty: int, var: sp.Symbol, specs: list, 
         word=word,
         snippets=snippets,
     )
+    if point is not None:
+        # A point answer is one number, so two mistakes easily land on the same
+        # value (w'h = wh' at t0, say). The grader would then name the wrong one.
+        wrong = [w for w in (m.buggy(built) for m in MISTAKES) if w is not None]
+        if len(set(wrong)) < len(wrong) or key_out in wrong:
+            raise ValueError("two mistakes give the same number here; resample")
+    return built
 
 
 # --- families -------------------------------------------------------------
@@ -381,11 +416,13 @@ def _build_mono_exp(p: Params) -> Built:
 
 
 def _sample_two_linear(rng: Random) -> Params:
-    # Proportional factors would make a square (or a multiple of one), not a product of two.
+    # Proportional factors would make a square (or a multiple of one), not a
+    # product of two. And when ac = ad - bc, multiplying the derivatives and
+    # subtracting the terms give the same number, so the two mistakes blur.
     while True:
         a, b = nonzero_int(rng, -4, 4), nonzero_int(rng, -7, 7)
         c, d = rng.randint(1, 5), nonzero_int(rng, -7, 7)
-        if a * d != b * c:
+        if a * d != b * c and a * c != a * d - b * c:
             return {"f": [a, b], "g": [c, d]}
 
 
@@ -453,7 +490,7 @@ def _build_linear_sqrt(p: Params) -> Built:
 
 
 def _sample_sqrt_transcendental(rng: Random) -> Params:
-    return {"k": pick(rng, [1, 1, 2, 3, 4]), "other": pick(rng, TRANSCENDENTAL)}
+    return {"k": pick(rng, [1, 1, 2, 3, 4, 5, -1, -2, -3]), "other": pick(rng, TRANSCENDENTAL)}
 
 
 def _build_sqrt_transcendental(p: Params) -> Built:
@@ -462,14 +499,19 @@ def _build_sqrt_transcendental(p: Params) -> Built:
 
 
 def _sample_transcendental_pair(rng: Random) -> Params:
+    # Only six pairs exist, so a constant in front keeps repeats rare.
     first = pick(rng, TRANSCENDENTAL)
     second = pick(rng, [k for k in TRANSCENDENTAL if k != first])
-    return {"pair": [first, second]}
+    return {"a": pick(rng, [1, 1, 1, 2, 3, 4, 5, -1, -2, -3]), "pair": [first, second]}
 
 
 def _build_transcendental_pair(p: Params) -> Built:
-    return build_product(family="transcendental_pair", difficulty=3, var=x, specs=list(p["pair"]), params=p,
-                         tidy="factor")
+    # The constant belongs to whichever function SymPy prints first, so f is
+    # "3 e^x" in "3 e^x sin x" rather than g being "3 sin x".
+    first, second = _in_display_order(p["pair"], x)
+    a = p.get("a", 1)
+    specs = [first if a == 1 else ["scale", a, first], second]
+    return build_product(family="transcendental_pair", difficulty=3, var=x, specs=specs, params=p, tidy="factor")
 
 
 # d4 ----------------------------------------------------------------------
@@ -511,9 +553,10 @@ _RECTANGLE = (
     "How fast is the area changing, in cm²/s, at $t = {t0}$?",
 )
 _REVENUE = (
-    ("A store cuts the price of a gadget each week. After $t$ weeks the price is $p(t) = {p}$ dollars and "
-     "it sells $q(t) = {q}$ gadgets a day, so its daily revenue is $R(t) = p(t)\\,q(t)$ dollars."),
-    "At what rate is the daily revenue changing at $t = {t0}$, in dollars per week?",
+    ("A theater lowers its ticket price a little each week to fill more seats. After $t$ weeks a ticket "
+     "costs $p(t) = {p}$ dollars and $q(t) = {q}$ people come to each show, so the revenue from one show "
+     "is $R(t) = p(t)\\,q(t)$ dollars."),
+    "At what rate is the revenue from one show changing at $t = {t0}$, in dollars per week?",
 )
 _BOX = (
     ("A rectangular box is expanding. After $t$ seconds its length, width and height are "
@@ -542,7 +585,8 @@ def _build_word_rectangle(p: Params) -> Built:
 
 
 def _sample_word_revenue(rng: Random) -> Params:
-    # t0 is a perfect square and k a multiple of 2 sqrt(t0), so every value is a whole number.
+    # t0 is a perfect square and k a multiple of 2 sqrt(t0), so every value is a
+    # whole number. The ticket still costs 5 to 30 dollars at t0.
     s = rng.randint(1, 3)
     t0 = s * s
     b = rng.randint(1, 3)
@@ -564,9 +608,11 @@ def _build_word_revenue(p: Params) -> Built:
 
 
 def _sample_word_box(rng: Random) -> Params:
+    # No two sides proportional (t + 2 and 2t + 4): their terms would be equal,
+    # so leaving out either one would give the same wrong number.
     while True:
         dims = [[rng.randint(1, 3), rng.randint(1, 8)] for _ in range(3)]
-        if len({tuple(d) for d in dims}) == 3:
+        if all(a * d != b * c for i, (a, b) in enumerate(dims) for c, d in dims[i + 1:]):
             return {"dims": dims, "t0": rng.randint(1, 3)}
 
 
@@ -593,10 +639,10 @@ FAMILIES = (
     _family("linear_sqrt", 3, "Linear factor times sqrt(x)", _sample_linear_sqrt, _build_linear_sqrt),
     _family("sqrt_transcendental", 3, "Multiple of sqrt(x) times sin, cos, e^x or ln x",
             _sample_sqrt_transcendental, _build_sqrt_transcendental),
-    _family("transcendental_pair", 3, "Two of sin, cos, e^x and ln x", _sample_transcendental_pair,
-            _build_transcendental_pair),
-    _family("word_revenue", 3, "Rate of change of revenue, price times quantity, at a time", _sample_word_revenue,
-            _build_word_revenue, word=True),
+    _family("transcendental_pair", 3, "Two of sin, cos, e^x and ln x, often with a constant in front",
+            _sample_transcendental_pair, _build_transcendental_pair),
+    _family("word_revenue", 3, "Rate of change of revenue, ticket price times attendance, at a time",
+            _sample_word_revenue, _build_word_revenue, word=True),
     _family("triple", 4, "Monomial times two of sin, cos, e^x and ln x", _sample_triple, _build_triple),
     _family("power_transcendental", 4, "Negative or fractional power of x times sin, cos, e^x or ln x",
             _sample_power_transcendental, _build_power_transcendental),
@@ -658,10 +704,22 @@ def _drop_first_term(b: Built) -> sp.Expr | None:
     return None if wrong == _product_of_derivatives(b) else wrong
 
 
+def _drop_middle_term(b: Built) -> sp.Expr | None:
+    # Three factors only: wrote f'gh + fgh' and forgot fg'h.
+    fs, ds = _factors(b)
+    if len(fs) != 3:
+        return None
+    return _terms(fs, ds, [0, 2])
+
+
 def _grouped_product_of_derivatives(b: Built) -> sp.Expr | None:
     # (f (gh))' = f' gh + f (gh)', with (gh)' taken as g'h'.
     fs, ds = _factors(b)
     if len(fs) != 3:
+        return None
+    # With e^x as g or h, g'h' is gh' or g'h, so the answer is just a dropped
+    # term and the missing-term patterns explain it better.
+    if "exp" in _kinds(b)[1:]:
         return None
     return ds[0] * fs[1] * fs[2] + fs[0] * ds[1] * ds[2]
 
@@ -688,11 +746,14 @@ def _subtracted_terms(b: Built) -> sp.Expr | None:
 
 
 def _ln_derivative_one(b: Built) -> sp.Expr | None:
-    return _with_derivative(b, _index_of(b, "ln"), sp.Integer(1))
+    i = _index_of(b, "ln")
+    return None if i is None else _with_derivative(b, i, _scale(_shown(b)[i]) * sp.Integer(1))
 
 
 def _exp_as_power(b: Built) -> sp.Expr | None:
-    return _with_derivative(b, _index_of(b, "exp"), b.var * sp.exp(b.var - 1))
+    # d/dx e^x written as x e^(x - 1), as if e^x were x^n.
+    i = _index_of(b, "exp")
+    return None if i is None else _with_derivative(b, i, _scale(_shown(b)[i]) * b.var * sp.exp(b.var - 1))
 
 
 def _power_index(b: Built) -> int | None:
@@ -747,23 +808,28 @@ MISTAKES = (
     _pattern(
         "product_of_derivatives", "assemble", _product_of_derivatives,
         "Check how you combined the derivatives. Multiplying them, $[[primes_product]]$, is not the product "
-        "rule: each term differentiates one factor and keeps the others, $[[rule]]$.",
+        "rule: each term differentiates one factor and keeps the rest, $[[rule]]$.",
         signature=True,
     ),
     _pattern(
         "product_rule_missing_term", "assemble", _drop_last_term,
-        "Your answer is missing the term where $[[last_colored]]$ is differentiated and the other factors stay "
-        "as they are. The product rule needs one term for each factor.",
+        "Your answer is missing the term where $[[last_colored]]$ is differentiated and everything else is "
+        "kept. The product rule needs one term for each factor.",
     ),
     _pattern(
         "product_rule_missing_term", "assemble", _drop_first_term,
-        "Your answer is missing the term where $[[f:yellow]]$ is differentiated and the other factors stay "
-        "as they are. The product rule needs one term for each factor.",
+        "Your answer is missing the term where $[[f:yellow]]$ is differentiated and everything else is "
+        "kept. The product rule needs one term for each factor.",
+    ),
+    _pattern(
+        "product_rule_missing_term", "assemble", _drop_middle_term,
+        "Your answer is missing the term where $[[g:mint]]$ is differentiated and everything else is "
+        "kept. With three factors the product rule has three terms.",
     ),
     _pattern(
         "product_of_derivatives", "assemble", _grouped_product_of_derivatives,
-        "Treating $[[rest]]$ as one factor is fine, but its derivative needs the product rule as well. "
-        "You used $[[rest_primes]]$, the product of the two derivatives.",
+        "Treating $[[rest]]$ as one factor is fine, but its derivative needs the product rule too. "
+        "You multiplied the two derivatives instead and got $[[rest_primes]]$.",
     ),
     _pattern(
         "sign_error", "assemble", _subtracted_terms,

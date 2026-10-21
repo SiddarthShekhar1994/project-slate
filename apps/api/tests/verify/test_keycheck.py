@@ -94,7 +94,7 @@ def _circle(key):
     return Built(
         family="circle", difficulty=1, task="implicit_differentiate", var=x, dependent=y,
         expr=x**2 + y**2 - 25, equation=sp.Eq(x**2 + y**2, 25), key=key,
-        steps=(Step("solve", "Solve for dy/dx", r"\frac{dy}{dx} = -\frac{x}{y}", expr=key),),
+        steps=(Step("solve", r"Solve for $\frac{dy}{dx}$", r"\frac{dy}{dx} = -\frac{x}{y}", expr=key),),
         parts={}, params={}, prompt=r"Find $\frac{dy}{dx}$ if $x^2 + y^2 = 25$.",
     )
 
@@ -111,3 +111,14 @@ def test_report_serialises():
     data = verify_built(CHAIN, chain(["sin"], x**3 + 1)).as_dict()
     assert data["ok"] is True
     assert all({"name", "passed", "detail"} <= set(c) for c in data["checks"])
+
+
+def test_math_outside_dollar_signs_is_rejected():
+    from slate_api.services.verify.keycheck import plain_text_math
+
+    assert plain_text_math("Differentiate $f(x) = x^2 + \\sqrt{x}$.") is None
+    assert plain_text_math("It costs $5 and $6.") is None
+    for bad in ["Use x^2 here", "the rule d/dx of", "take sqrt(x)", "write \\frac{a}{b}", "so 3*x", "then f'(x) is"]:
+        assert plain_text_math(bad), bad
+    built = replace(chain(["sin"], x**3 + 1), prompt="Differentiate f(x) = sin(x^3 + 1).")
+    assert "text" in failed(verify_built(CHAIN, built))

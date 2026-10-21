@@ -201,7 +201,12 @@ export function LessonPlayer({ lesson, initialStep, initialSpeed, initialVoice, 
   }, [checkpointOpen, finished, goTo, t, duration, endOfStep]);
 
   // Keyboard: space or k plays and pauses, arrows change step, c toggles captions.
+  // Shortcuts only work while focus is inside the player (WCAG 2.1.4), so they
+  // never fire from speech input or typing elsewhere on the page.
+  const playerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    const root = playerRef.current;
+    if (!root) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       const onButton = event.target instanceof HTMLButtonElement;
@@ -218,8 +223,8 @@ export function LessonPlayer({ lesson, initialStep, initialSpeed, initialVoice, 
         setCaptions((c) => !c);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    root.addEventListener("keydown", onKey);
+    return () => root.removeEventListener("keydown", onKey);
   }, [togglePlay, goTo, step, playing, checkpointOpen]);
 
   const board = useMemo(
@@ -238,10 +243,13 @@ export function LessonPlayer({ lesson, initialStep, initialSpeed, initialVoice, 
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    <div ref={playerRef} className="flex min-w-0 flex-col gap-4">
       <audio ref={audioRef} preload="auto" className="hidden" />
 
-      <Board state={board} label={`Board for step ${step + 1}: ${current.title}`} />
+      {/* Focusable so keyboard users can land on the board and use the shortcuts. */}
+      <div tabIndex={0} aria-describedby="player-keys" className="rounded-[14px]">
+        <Board state={board} label={`Board for step ${step + 1}: ${current.title}`} />
+      </div>
 
       {/* Screen readers get each step's full narration once, when it starts. */}
       <p className="sr-only" aria-live="polite">
@@ -393,9 +401,10 @@ function Controls(props: ControlsProps) {
         </p>
       </div>
 
-      <ol className="flex gap-1" aria-label="Steps">
+      {/* Each step stays a 44px target; on narrow screens the row scrolls instead of shrinking. */}
+      <ol className="-mx-1 flex gap-1 overflow-x-auto px-1" aria-label="Steps">
         {steps.map((title, i) => (
-          <li key={i} className="min-w-0 flex-1">
+          <li key={i} className="min-w-11 flex-1">
             <button
               type="button"
               onClick={() => props.onSeek(i)}
@@ -461,8 +470,8 @@ function Controls(props: ControlsProps) {
           Captions {props.captions ? "on" : "off"}
         </button>
       </div>
-      <p className="hidden text-xs text-muted sm:block">
-        Keys: <kbd className="font-mono">Space</kbd> play or pause, <kbd className="font-mono">←</kbd>{" "}
+      <p id="player-keys" className="hidden text-xs text-muted sm:block">
+        With the board or a control focused: <kbd className="font-mono">Space</kbd> play or pause, <kbd className="font-mono">←</kbd>{" "}
         <kbd className="font-mono">→</kbd> step, <kbd className="font-mono">C</kbd> captions.
       </p>
     </div>
