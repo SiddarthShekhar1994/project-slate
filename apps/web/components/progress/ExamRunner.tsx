@@ -167,6 +167,7 @@ function ExamInProgress({ exam, onUpdate }: { exam: ExamView; onUpdate: (exam: E
               <AnswerInput
                 variables={item.problem.variables}
                 answerKind={item.problem.answer_kind}
+                prompt={item.problem.prompt}
                 initialText={answers[item.id] ?? ""}
                 busy={saving === item.id}
                 blocked={saving !== null && saving !== item.id}

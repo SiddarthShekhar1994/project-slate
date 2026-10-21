@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math/MathText";
 import { ApiError, api } from "@/lib/api";
 import type { AskAnswer } from "@/lib/types";
+import { VoiceButton } from "./VoiceButton";
 
 type Exchange = { question: string; step: number; answer: AskAnswer | null; error: string | null };
 
@@ -12,6 +13,8 @@ export function AskPanel({ lessonId, step, stepTitle }: { lessonId: string; step
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Exchange[]>([]);
   const [busy, setBusy] = useState(false);
+  const [voiceNote, setVoiceNote] = useState<{ text: string; error: boolean } | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
   const id = useId();
 
   async function onSubmit(event: FormEvent) {
@@ -20,6 +23,7 @@ export function AskPanel({ lessonId, step, stepTitle }: { lessonId: string; step
     if (!q || busy) return;
     setBusy(true);
     setQuestion("");
+    setVoiceNote(null);
     const entry: Exchange = { question: q, step, answer: null, error: null };
     setHistory((h) => [entry, ...h]);
     try {
@@ -46,6 +50,7 @@ export function AskPanel({ lessonId, step, stepTitle }: { lessonId: string; step
           Your question
         </label>
         <textarea
+          ref={box}
           id={`${id}-q`}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
@@ -60,6 +65,14 @@ export function AskPanel({ lessonId, step, stepTitle }: { lessonId: string; step
           placeholder="Why do we keep the inside the same?"
           className="min-h-12 flex-1 resize-y rounded-[10px] border border-border bg-raised px-4 py-3 text-base text-text placeholder:text-muted/70 focus-visible:border-accent-light"
         />
+        <VoiceButton
+          disabled={busy}
+          onText={(text) => {
+            setQuestion(text);
+            requestAnimationFrame(() => box.current?.focus());
+          }}
+          onMessage={(text, error = false) => setVoiceNote({ text, error })}
+        />
         <button
           type="submit"
           disabled={busy || !question.trim()}
@@ -68,6 +81,9 @@ export function AskPanel({ lessonId, step, stepTitle }: { lessonId: string; step
           {busy ? "Thinking…" : "Ask"}
         </button>
       </form>
+      <p aria-live="polite" className={`mt-2 text-sm ${voiceNote?.error ? "text-warning" : "text-muted"}`}>
+        {voiceNote?.text ?? ""}
+      </p>
       <ol className="mt-4 flex flex-col gap-3" aria-live="polite">
         {history.map((entry, i) => (
           <li key={i} className="rounded-[10px] bg-raised px-4 py-3">

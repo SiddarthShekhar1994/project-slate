@@ -28,8 +28,8 @@ export default defineConfig({
     {
       command: "uv run uvicorn slate_api.main:app --host 127.0.0.1 --port 8000",
       cwd: ROOT,
-      // The silent provider lets the audio-driven clock be tested without API keys.
-      env: { TTS_PROVIDER: process.env.TTS_PROVIDER ?? "silent" },
+      // The silent voice and fake transcriber let audio paths be tested without API keys.
+      env: { TTS_PROVIDER: process.env.TTS_PROVIDER ?? "silent", STT_PROVIDER: process.env.STT_PROVIDER ?? "fake" },
       url: "http://127.0.0.1:8000/api/health",
       reuseExistingServer: true,
       timeout: 60_000,

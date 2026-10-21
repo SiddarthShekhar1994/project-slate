@@ -111,6 +111,15 @@ export type AnswerResponse = { grade: Grade; item: WorksheetItem; stats: Workshe
 
 export type Preview = { ok: boolean; latex: string | null; error: string | null };
 
+/** What Slate read from a photo of the student's work; it only fills the answer box. */
+export type PhotoReading = {
+  text: string;
+  latex: string | null;
+  error: string | null;
+  confidence: number;
+  method: "claude" | "tesseract";
+};
+
 // --- lessons -------------------------------------------------------------------
 
 export type MasteryStatus = "new" | "learning" | "practiced" | "mastered";

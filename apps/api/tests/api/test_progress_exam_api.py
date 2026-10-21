@@ -254,3 +254,54 @@ def test_weights_come_from_the_syllabus(signed_in):
     assert by_id[PRODUCT]["weight"] == pytest.approx(25.0, abs=0.1)
     assert by_id[CHAIN]["source"]["locator"] == "p. 2" and "30%" in by_id[CHAIN]["source"]["line"]
     assert by_id[PRODUCT]["source"] is None
+
+
+# --- stage 6: voice and photo input ------------------------------------------------------------
+
+
+def test_voice_endpoints(signed_in, monkeypatch):
+    from slate_api.services import stt
+
+    for key in ("STT_PROVIDER", "OPENAI_API_KEY", "ELEVENLABS_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    stt.get_transcriber.cache_clear()
+    assert signed_in.get("/api/voice").json() == {"available": False, "provider": None}
+    r = signed_in.post("/api/voice/transcribe", files={"audio": ("q.webm", b"audio", "audio/webm")})
+    assert r.status_code == 503
+
+    monkeypatch.setenv("STT_PROVIDER", "fake")
+    stt.get_transcriber.cache_clear()
+    assert signed_in.get("/api/voice").json()["available"] is True
+    r = signed_in.post("/api/voice/transcribe", files={"audio": ("q.webm", b"audio", "audio/webm;codecs=opus")})
+    assert r.status_code == 200 and r.json()["text"] == stt.FAKE_TRANSCRIPT
+    r = signed_in.post("/api/voice/transcribe", files={"audio": ("q.txt", b"hello", "text/plain")})
+    assert r.status_code == 422
+    stt.get_transcriber.cache_clear()
+
+
+def test_photo_endpoint(signed_in, client, monkeypatch):
+    import io as _io
+
+    from PIL import Image as _Image
+
+    from slate_api.services import photo
+
+    class Fake:
+        available = True
+
+        def structured(self, **kwargs):
+            return photo.PhotoAnswer(found=True, answer="2x*cos(x^2)", confidence=0.8)
+
+    monkeypatch.setattr(photo, "get_llm", lambda: Fake())
+    buf = _io.BytesIO()
+    _Image.new("RGB", (200, 80), "white").save(buf, format="JPEG")
+    image = ("work.jpg", buf.getvalue(), "image/jpeg")
+    r = signed_in.post("/api/math/photo", files={"image": image}, data={"variables": "x", "prompt": "Differentiate."})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["text"] == "2x*cos(x^2)" and "\\cos" in body["latex"] and body["method"] == "claude"
+    assert signed_in.post("/api/math/photo", files={"image": image}, data={"variables": "z"}).status_code == 422
+    r = signed_in.post("/api/math/photo", files={"image": ("a.txt", b"not an image", "text/plain")})
+    assert r.status_code == 422
+    signed_in.post("/api/auth/logout")
+    assert client.post("/api/math/photo", files={"image": image}).status_code == 401

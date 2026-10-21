@@ -11,6 +11,7 @@ import type {
   ExamView,
   ExamWeight,
   FormulaSheet,
+  PhotoReading,
   Preview,
   ProgressView,
   ReviewQueue,
@@ -38,6 +39,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
   if (response.status === 204) return undefined as T;
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof body.detail === "string" ? body.detail : "Something went wrong. Try again.";
+    throw new ApiError(response.status, detail);
+  }
+  return body as T;
+}
+
+/** Multipart POST; the browser sets the boundary, so no Content-Type header here. */
+async function send<T>(path: string, form: FormData): Promise<T> {
+  const response = await fetch(`/api${path}`, { method: "POST", body: form, credentials: "same-origin" });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof body.detail === "string" ? body.detail : "Something went wrong. Try again.";
@@ -100,6 +112,21 @@ export const api = {
       body: JSON.stringify({ answer }),
     }),
   finishExam: (id: string) => post<ExamView>(`/exam/${id}/finish`),
+
+  voiceStatus: () => request<{ available: boolean; provider: string | null }>("/voice"),
+  transcribe: (audio: Blob) => {
+    const form = new FormData();
+    const ext = audio.type.includes("mp4") ? "m4a" : audio.type.includes("ogg") ? "ogg" : "webm";
+    form.append("audio", audio, `question.${ext}`);
+    return send<{ text: string }>("/voice/transcribe", form);
+  },
+  readPhoto: (image: File, variables: string[], prompt: string) => {
+    const form = new FormData();
+    form.append("image", image);
+    form.append("variables", variables.join(","));
+    form.append("prompt", prompt.slice(0, 1000));
+    return send<PhotoReading>("/math/photo", form);
+  },
 
   sources: () => request<{ sources: SourceView[]; kinds: Record<string, string> }>("/sources"),
   source: (id: string) => request<SourceView>(`/sources/${id}`),

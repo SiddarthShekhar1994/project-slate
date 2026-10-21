@@ -46,7 +46,7 @@ test.describe("lesson player", () => {
 
   test("ask about this step answers with math rendered", async ({ page }) => {
     await page.getByLabel("Your question").fill("Why do we call the inside u?");
-    await page.getByRole("button", { name: "Ask" }).click();
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
     await expect(page.locator("ol[aria-live] .katex").first()).toBeVisible();
   });
 

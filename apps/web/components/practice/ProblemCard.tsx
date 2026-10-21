@@ -58,6 +58,7 @@ export function ProblemCard({ item, total, grade, busy, onAnswer, onHint, onSimi
           key={item.problem.id}
           variables={item.problem.variables}
           answerKind={item.problem.answer_kind}
+          prompt={item.problem.prompt}
           busy={busy === "answer"}
           blocked={busy !== null}
           onSubmit={onAnswer}

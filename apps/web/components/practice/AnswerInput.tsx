@@ -1,7 +1,8 @@
 "use client";
 
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { Icon } from "@/components/shared/ui/Icon";
+import { ApiError, api } from "@/lib/api";
 import type { Preview } from "@/lib/types";
 import { Tex } from "@/components/shared/math/Tex";
 
@@ -20,6 +21,8 @@ type Props = {
   label?: string;
   submitLabel?: string;
   busyLabel?: string;
+  /** The problem text, so a photo of the work can be read in context. */
+  prompt?: string;
 };
 
 const INSERTS: { label: string; aria: string; text: string; caret: number }[] = [
@@ -53,8 +56,11 @@ export function AnswerInput({
   label = "Your answer",
   submitLabel = "Check answer",
   busyLabel = "Checking…",
+  prompt = "",
 }: Props) {
   const [text, setText] = useState(initialText);
+  const [photo, setPhoto] = useState<{ state: "reading" | "done" | "error"; message: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   // The preview remembers which text it is for, so a stale response never shows.
   const [preview, setPreview] = useState<{ text: string; result: Preview } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +100,23 @@ export function AnswerInput({
       input.focus();
       input.setSelectionRange(start + caret, start + caret);
     });
+  }
+
+  async function readPhoto(file: File) {
+    setPhoto({ state: "reading", message: "Reading your photo…" });
+    try {
+      const reading = await api.readPhoto(file, variableKey.split(","), prompt);
+      setText(reading.text);
+      setPhoto({
+        state: "done",
+        message: reading.error
+          ? "Read from your photo, but part of it didn't make sense. Fix it below, then check."
+          : "Read from your photo. Make sure it matches what you wrote, then check it.",
+      });
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } catch (e) {
+      setPhoto({ state: "error", message: e instanceof ApiError ? e.message : "Couldn't read that photo." });
+    }
   }
 
   const shown = preview && preview.text === text && text.trim() ? preview.result : null;
@@ -157,7 +180,33 @@ export function AnswerInput({
             {item.label}
           </button>
         ))}
+        <button
+          type="button"
+          disabled={disabled || photo?.state === "reading"}
+          onClick={() => fileRef.current?.click()}
+          className="inline-flex min-h-11 items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-sm text-text-2 hover:bg-hover hover:text-text disabled:opacity-50"
+        >
+          <Icon name="camera" size={18} />
+          {photo?.state === "reading" ? "Reading…" : "Photo of your work"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void readPhoto(file);
+          }}
+        />
       </div>
+      <p aria-live="polite" className={`text-sm ${photo?.state === "error" ? "text-warning" : "text-text-2"}`}>
+        {photo?.message ?? ""}
+      </p>
       <p id={helpId} className="text-xs text-muted">
         {help}
       </p>

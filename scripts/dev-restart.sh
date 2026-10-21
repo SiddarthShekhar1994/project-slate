@@ -18,7 +18,7 @@ wait_for() {
 if [[ "$target" == api || "$target" == all ]]; then
   pkill -f "[u]vicorn slate_api.main:app" || true
   sleep 1
-  (cd "$ROOT" && TTS_PROVIDER="${TTS_PROVIDER:-silent}" nohup uv run uvicorn slate_api.main:app --host 127.0.0.1 --port 8000 > var/api.log 2>&1 &)
+  (cd "$ROOT" && TTS_PROVIDER="${TTS_PROVIDER:-silent}" STT_PROVIDER="${STT_PROVIDER:-fake}" nohup uv run uvicorn slate_api.main:app --host 127.0.0.1 --port 8000 > var/api.log 2>&1 &)
   wait_for http://127.0.0.1:8000/api/health && echo "api up"
 fi
 if [[ "$target" == web || "$target" == all ]]; then
