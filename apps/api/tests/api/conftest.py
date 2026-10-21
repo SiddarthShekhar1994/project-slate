@@ -1,6 +1,9 @@
 import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://slate:slate@localhost:5432/slate_test")
+# The session fixture drops the whole schema, so never inherit DATABASE_URL:
+# a dev URL exported in the shell (or loaded from .env) would be wiped.
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL",
+                                            "postgresql+psycopg://slate:slate@localhost:5432/slate_test")
 os.environ["SANDBOX"] = "inline"
 os.environ.setdefault("STORAGE_DIR", "/tmp/slate-test-storage")
 
@@ -20,6 +23,8 @@ API_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 def schema():
     cfg = Config(os.path.join(API_DIR, "alembic.ini"))
     cfg.set_main_option("script_location", os.path.join(API_DIR, "migrations"))
+    database = get_engine().url.database or ""
+    assert database.endswith("_test"), f"refusing to drop the schema of {database!r}: use a *_test database"
     with get_engine().begin() as conn:
         conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
     command.upgrade(cfg, "head")

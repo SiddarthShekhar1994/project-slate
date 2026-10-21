@@ -7,11 +7,17 @@ from dataclasses import dataclass
 from functools import cache
 
 
+def _env(name: str, default: str) -> str:
+    """The variable's value; blank counts as unset, as in a half-filled .env."""
+    raw = os.environ.get(name, "").strip()
+    return raw or default
+
+
 def _bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return raw.lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -31,16 +37,16 @@ class Settings:
 @cache
 def get_settings() -> Settings:
     return Settings(
-        database_url=os.environ.get("DATABASE_URL", "postgresql+psycopg://slate:slate@localhost:5432/slate"),
-        session_cookie=os.environ.get("SESSION_COOKIE", "slate_session"),
-        session_days=int(os.environ.get("SESSION_DAYS", "30")),
+        database_url=_env("DATABASE_URL", "postgresql+psycopg://slate:slate@localhost:5432/slate"),
+        session_cookie=_env("SESSION_COOKIE", "slate_session"),
+        session_days=int(_env("SESSION_DAYS", "30")),
         cookie_secure=_bool("COOKIE_SECURE", False),
-        grading_timeout_s=float(os.environ.get("GRADING_TIMEOUT_S", "4")),
+        grading_timeout_s=float(_env("GRADING_TIMEOUT_S", "4")),
         # "process" isolates each grading call in a child process that can be
         # killed on timeout; "inline" is for tests and debugging.
-        sandbox=os.environ.get("SANDBOX", "process"),
-        storage_dir=os.environ.get("STORAGE_DIR", "var/storage"),
+        sandbox=_env("SANDBOX", "process"),
+        storage_dir=_env("STORAGE_DIR", "var/storage"),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
-        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5"),
-        worksheet_size=int(os.environ.get("WORKSHEET_SIZE", "6")),
+        anthropic_model=_env("ANTHROPIC_MODEL", "claude-opus-5-5"),
+        worksheet_size=int(_env("WORKSHEET_SIZE", "6")),
     )

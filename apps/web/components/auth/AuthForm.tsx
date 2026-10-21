@@ -10,8 +10,11 @@ import { useSession } from "@/lib/session";
  * Only same-origin paths are allowed as the post-login destination. Parsing the
  * URL catches tricks like "/\\evil.com", which browsers read as "//evil.com".
  */
-export function safeNext(raw: string | null, origin = window.location.origin): string {
+export function safeNext(raw: string | null, origin?: string): string {
   if (!raw || !raw.startsWith("/")) return "/library";
+  // There is no window while the page renders on the server. Any fixed base
+  // gives the same answer for a same-origin path, so server and client agree.
+  origin ??= typeof window === "undefined" ? "http://localhost" : window.location.origin;
   try {
     const url = new URL(raw, origin);
     if (url.origin !== origin) return "/library";

@@ -34,8 +34,13 @@ def _context():
     global _ctx
     with _lock:
         if _ctx is None:
-            _ctx = mp.get_context("forkserver")
-            _ctx.set_forkserver_preload(_PRELOAD)
+            # Windows has no forkserver; spawn works there but re-imports SymPy
+            # for every answer, so grading is slower (keep GRADING_TIMEOUT_S >= 4).
+            if "forkserver" in mp.get_all_start_methods():
+                _ctx = mp.get_context("forkserver")
+                _ctx.set_forkserver_preload(_PRELOAD)
+            else:
+                _ctx = mp.get_context("spawn")
         return _ctx
 
 

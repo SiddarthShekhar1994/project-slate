@@ -272,17 +272,19 @@ EXTENSIONS = {"audio/mpeg": "mp3", "audio/wav": "wav"}
 
 @cache
 def get_provider() -> Provider | None:
-    name = os.environ.get("TTS_PROVIDER", "elevenlabs").lower()
+    # Empty means: ElevenLabs if its key is set, otherwise OpenAI if its key is set.
+    name = os.environ.get("TTS_PROVIDER", "").lower()
     if name == "silent":
         return Silent()
-    if name == "elevenlabs" and os.environ.get("ELEVENLABS_API_KEY"):
+    if name in ("", "elevenlabs") and os.environ.get("ELEVENLABS_API_KEY"):
         return ElevenLabs(
             api_key=os.environ["ELEVENLABS_API_KEY"],
-            model=os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
-            voice_list=os.environ.get("ELEVENLABS_VOICES", ELEVENLABS_DEFAULT_VOICES),
+            model=os.environ.get("ELEVENLABS_MODEL") or "eleven_multilingual_v2",
+            voice_list=os.environ.get("ELEVENLABS_VOICES") or ELEVENLABS_DEFAULT_VOICES,
         )
-    if name == "openai" and os.environ.get("OPENAI_API_KEY"):
-        return OpenAITTS(api_key=os.environ["OPENAI_API_KEY"], model=os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"))
+    if name in ("", "openai") and os.environ.get("OPENAI_API_KEY"):
+        return OpenAITTS(api_key=os.environ["OPENAI_API_KEY"],
+                         model=os.environ.get("OPENAI_TTS_MODEL") or "gpt-4o-mini-tts")
     return None
 
 

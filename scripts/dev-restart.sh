@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Restart the local API and/or web dev servers in the background.
+# Test helper (macOS/Linux): restart the API (port 8000) and/or the web dev
+# server (port 3000) in the background, with the silent test voice and the fake
+# transcriber, logging to var/. It stops every running Slate API and every
+# `next dev` server on the machine first. To just run Slate, use scripts/start.sh.
 #   scripts/dev-restart.sh api|web|all
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

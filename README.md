@@ -48,43 +48,79 @@ apps/
     lib/lesson/           lesson script types and the timeline engine
 packages/
   skills/                 one Python module per skill: families, steps, mistakes, hints, formula
-scripts/                  check_skill.py, dev-restart.sh, e2e_keys.py
+scripts/                  setup.sh, start.sh, check_skill.py, e2e_keys.py, dev-restart.sh (test helper)
 ```
 
 ## Running it locally
 
-Requirements: Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 20.9+ with pnpm, and PostgreSQL 16 (or `docker compose up postgres`).
+You need:
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (it installs Python for you)
+- Node 24 LTS, or Node 22.22.2 or newer, with pnpm 10: run `corepack enable` once
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) for the database, or your own PostgreSQL 16 (see "Without Docker" below)
+
+It runs on macOS and Linux. On Windows, use WSL2: install Ubuntu from the Microsoft Store, turn on WSL integration in Docker Desktop's settings, clone the repo inside your Linux home folder (not under `/mnt/c`), and run every command in the Ubuntu terminal.
 
 ```bash
-cp .env.example .env            # then fill in what you want to use
-uv sync --all-packages          # Python workspace: apps/api + packages/skills
-(cd apps/web && pnpm install)
-
-createdb slate                  # or use docker compose
-uv run alembic -c apps/api/alembic.ini upgrade head
-
-uv run uvicorn slate_api.main:app --port 8000      # API
-(cd apps/web && pnpm dev --port 3000)              # web, proxies /api to the API
+git clone https://github.com/SiddarthShekhar1994/project-slate.git
+cd project-slate
+scripts/setup.sh     # once: .env, PostgreSQL in Docker, packages, database tables
+scripts/start.sh     # API on :8000 and web app on :3000; Ctrl-C stops both
 ```
 
-Open http://localhost:3000 and create an account.
+Open http://localhost:3000 and create an account. Next time, `scripts/start.sh` is all you need.
 
-Without API keys everything still works. Hints, notes and "ask about this step" fall back to the templated text in the skills package, and lessons play with captions on an estimated clock. Set `ANTHROPIC_API_KEY` for Claude-written answers and lessons. Set `ELEVENLABS_API_KEY` or `OPENAI_API_KEY` (with `TTS_PROVIDER`) for the narrated voice.
+### What the scripts do
 
-The same OpenAI or ElevenLabs key turns spoken questions into text (`STT_PROVIDER` picks one when both are set); without either, the ask panel is typed only.
+If you'd rather run the steps yourself:
 
-Uploaded images and picture-only pages are read with Claude vision. Without an API key Slate falls back to Tesseract, which needs the `tesseract` binary on the path (`apt install tesseract-ocr` or `brew install tesseract`). If neither is there, the page is kept but marked as unread.
+```bash
+cp .env.example .env
+docker compose up -d --wait postgres     # role slate/slate, databases slate and slate_test
+uv sync --all-packages                   # Python workspace: apps/api + packages/skills
+pnpm --dir apps/web install
+uv run --env-file .env alembic -c apps/api/alembic.ini upgrade head
+
+uv run --env-file .env uvicorn slate_api.main:app --port 8000    # terminal 1: API
+pnpm --dir apps/web dev --port 3000                              # terminal 2: web app
+```
+
+The API only reads real environment variables, so `.env` takes effect through `uv run --env-file .env`. The web app forwards `/api` to http://localhost:8000. If you run the API somewhere else, put `API_ORIGIN=http://localhost:<port>` in `apps/web/.env.local`, because Next.js doesn't read the root `.env`.
+
+### Without Docker
+
+Use PostgreSQL 16 from Homebrew, Postgres.app or `apt`. Create the role and databases that the default `DATABASE_URL` expects, then run `scripts/setup.sh` as usual. On Linux, run the first command as `sudo -u postgres psql -c "..."`.
+
+```bash
+psql -d postgres -c "CREATE ROLE slate LOGIN PASSWORD 'slate' CREATEDB"
+createdb -h localhost -U slate slate          # password: slate
+createdb -h localhost -U slate slate_test
+```
+
+Or point `DATABASE_URL` in `.env` at a database you already have. If Docker is installed but you use your own PostgreSQL, stop one of them: both want port 5432.
+
+### API keys (all optional)
+
+Without keys everything still works. Hints, notes and "ask about this step" fall back to the templated text in the skills package. Lessons you generate from your sources are composed from verified problems instead of written by Claude. Lessons play with captions on an estimated clock. Add keys to `.env` and restart:
+
+- `ANTHROPIC_API_KEY`: Claude writes lessons from your sources, answers questions, reads photos and scanned pages.
+- `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`: the narrated voice, and spoken questions in the ask panel. With both set, `TTS_PROVIDER` and `STT_PROVIDER` choose.
+
+Without `ANTHROPIC_API_KEY`, images and picture-only pages are read with Tesseract if it's installed (`brew install tesseract`, or `sudo apt install tesseract-ocr` on Linux and WSL). If neither is there, the page is kept but marked as unread.
 
 ## Tests
 
 ```bash
-uv run pytest                                   # verification, generation, grading, API (needs Postgres: slate_test)
+uv run pytest                                   # verification, generation, grading, API
 uv run python scripts/check_skill.py calc1.derivatives.chain_rule --seeds 100
-(cd apps/web && pnpm test)                      # Vitest: KaTeX, timeline engine, captions
-(cd apps/web && pnpm e2e)                       # Playwright, desktop and phone
+pnpm --dir apps/web test                        # Vitest: KaTeX, timeline engine, captions
+pnpm --dir apps/web exec playwright install chromium   # once, for the end-to-end tests
+pnpm --dir apps/web e2e                         # Playwright, desktop and phone
 ```
 
-The API tests use a database named `slate_test` (`createdb slate_test`). For Playwright in an environment with a preinstalled Chromium, set `PW_CHROMIUM_PATH` instead of running `playwright install`.
+The API tests drop and rebuild the schema of `slate_test`, which Docker creates for you. They never use `DATABASE_URL`. To point them elsewhere, set `TEST_DATABASE_URL` to a database whose name ends in `_test`. The tests also ignore any API keys in your shell, so they never call paid APIs.
+
+The end-to-end tests start the API on port 8000 and the web app on 3000 with a silent test voice and a fake transcriber, so stop `scripts/start.sh` first. If servers are already running on those ports, Playwright reuses them instead. The tests create throwaway accounts in your `slate` database. In an environment with a preinstalled Chromium, set `PW_CHROMIUM_PATH` instead of running `playwright install`.
 
 ## Adding a skill or a course
 

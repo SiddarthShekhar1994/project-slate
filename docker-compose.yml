@@ -1,4 +1,7 @@
-# Local services for development: Postgres and an S3-compatible object store.
+# Local services for development.
+#   docker compose up -d --wait postgres    Postgres 16 with role slate/slate and
+#                                           databases slate and slate_test
+#   docker compose up -d minio              optional S3-compatible storage
 services:
   postgres:
     image: postgres:16
@@ -7,7 +10,14 @@ services:
       POSTGRES_PASSWORD: slate
       POSTGRES_DB: slate
     ports: ["5432:5432"]
-    volumes: [pgdata:/var/lib/postgresql/data]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slate -d slate"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z

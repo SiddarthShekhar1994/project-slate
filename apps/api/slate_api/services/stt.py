@@ -107,9 +107,9 @@ def get_transcriber() -> Transcriber | None:
     if name == "fake":
         return FakeSTT()
     if name in ("", "openai") and openai_key:
-        return OpenAISTT(api_key=openai_key, model=os.environ.get("OPENAI_STT_MODEL", "whisper-1"))
+        return OpenAISTT(api_key=openai_key, model=os.environ.get("OPENAI_STT_MODEL") or "whisper-1")
     if name in ("", "elevenlabs") and eleven_key:
-        return ElevenLabsSTT(api_key=eleven_key, model=os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v1"))
+        return ElevenLabsSTT(api_key=eleven_key, model=os.environ.get("ELEVENLABS_STT_MODEL") or "scribe_v1")
     return None
 
 
