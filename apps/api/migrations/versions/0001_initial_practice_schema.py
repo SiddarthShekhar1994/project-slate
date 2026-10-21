@@ -17,6 +17,16 @@ down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# The schema runs on PostgreSQL (the website) and SQLite (the desktop app).
+JSON = sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql")
+
+
+def verified_ok(table: str) -> sa.CheckConstraint:
+    """Refuse rows whose verification report didn't pass; JSON is read differently per database."""
+    if op.get_context().dialect.name == "sqlite":
+        return sa.CheckConstraint("json_extract(verification, '$.ok') = 1", name=op.f(f"ck_{table}_verified_ok"))
+    return sa.CheckConstraint("(verification ->> 'ok') = 'true'", name=op.f(f"ck_{table}_verified_ok"))
+
 
 def upgrade() -> None:
     """Upgrade schema."""
@@ -32,19 +42,19 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_skills'))
     )
     op.create_table('users',
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('email', sa.String(length=320), nullable=False),
     sa.Column('display_name', sa.String(length=80), nullable=False),
     sa.Column('password_hash', sa.String(length=255), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_users')),
     sa.UniqueConstraint('email', name=op.f('uq_users_email'))
     )
     op.create_table('auth_sessions',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('user_id', sa.Uuid(), nullable=False),
     sa.Column('token_hash', sa.String(length=64), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('fk_auth_sessions_user_id_users'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_auth_sessions')),
@@ -52,27 +62,27 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_auth_sessions_user_id'), 'auth_sessions', ['user_id'], unique=False)
     op.create_table('problems',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('user_id', sa.Uuid(), nullable=False),
     sa.Column('skill_id', sa.String(length=120), nullable=False),
     sa.Column('family', sa.String(length=80), nullable=False),
     sa.Column('difficulty', sa.Integer(), nullable=False),
     sa.Column('seed', sa.BigInteger(), nullable=False),
-    sa.Column('params', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('params', JSON, nullable=False),
     sa.Column('signature', sa.String(length=64), nullable=False),
     sa.Column('origin', sa.String(length=20), nullable=False),
-    sa.Column('parent_id', sa.UUID(), nullable=True),
+    sa.Column('parent_id', sa.Uuid(), nullable=True),
     sa.Column('prompt', sa.Text(), nullable=False),
-    sa.Column('variables', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('variables', JSON, nullable=False),
     sa.Column('answer_kind', sa.String(length=20), nullable=False),
     sa.Column('key_latex', sa.Text(), nullable=False),
-    sa.Column('steps', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('hints', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('verification', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('steps', JSON, nullable=False),
+    sa.Column('hints', JSON, nullable=False),
+    sa.Column('verification', JSON, nullable=False),
     sa.Column('verified_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('source_chunk_id', sa.UUID(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.CheckConstraint("(verification ->> 'ok') = 'true'", name=op.f('ck_problems_verified_ok')),
+    sa.Column('source_chunk_id', sa.Uuid(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    verified_ok('problems'),
     sa.CheckConstraint('difficulty BETWEEN 1 AND 4', name=op.f('ck_problems_difficulty_range')),
     sa.ForeignKeyConstraint(['parent_id'], ['problems.id'], name=op.f('fk_problems_parent_id_problems')),
     sa.ForeignKeyConstraint(['skill_id'], ['skills.id'], name=op.f('fk_problems_skill_id_skills')),
@@ -83,27 +93,27 @@ def upgrade() -> None:
     op.create_index(op.f('ix_problems_skill_id'), 'problems', ['skill_id'], unique=False)
     op.create_index(op.f('ix_problems_user_id'), 'problems', ['user_id'], unique=False)
     op.create_table('worksheets',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('user_id', sa.Uuid(), nullable=False),
     sa.Column('title', sa.String(length=160), nullable=False),
-    sa.Column('skill_ids', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('skill_ids', JSON, nullable=False),
     sa.Column('mode', sa.String(length=20), nullable=False),
     sa.Column('seed', sa.BigInteger(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('fk_worksheets_user_id_users'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_worksheets'))
     )
     op.create_index(op.f('ix_worksheets_user_id'), 'worksheets', ['user_id'], unique=False)
     op.create_table('worksheet_items',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('worksheet_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('worksheet_id', sa.Uuid(), nullable=False),
     sa.Column('position', sa.Integer(), nullable=False),
     sa.Column('skill_id', sa.String(length=120), nullable=False),
     sa.Column('difficulty', sa.Integer(), nullable=False),
-    sa.Column('root_problem_id', sa.UUID(), nullable=False),
-    sa.Column('current_problem_id', sa.UUID(), nullable=False),
+    sa.Column('root_problem_id', sa.Uuid(), nullable=False),
+    sa.Column('current_problem_id', sa.Uuid(), nullable=False),
     sa.Column('status', sa.String(length=24), nullable=False),
     sa.Column('misses', sa.Integer(), nullable=False),
     sa.Column('problems_served', sa.Integer(), nullable=False),
@@ -121,10 +131,10 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_worksheet_items_worksheet_id'), 'worksheet_items', ['worksheet_id'], unique=False)
     op.create_table('attempts',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('user_id', sa.UUID(), nullable=False),
-    sa.Column('problem_id', sa.UUID(), nullable=False),
-    sa.Column('worksheet_item_id', sa.UUID(), nullable=True),
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('user_id', sa.Uuid(), nullable=False),
+    sa.Column('problem_id', sa.Uuid(), nullable=False),
+    sa.Column('worksheet_item_id', sa.Uuid(), nullable=True),
     sa.Column('skill_id', sa.String(length=120), nullable=False),
     sa.Column('raw_input', sa.Text(), nullable=False),
     sa.Column('latex', sa.Text(), nullable=False),
@@ -134,7 +144,7 @@ def upgrade() -> None:
     sa.Column('hints_used', sa.Integer(), nullable=False),
     sa.Column('first_try', sa.Boolean(), nullable=False),
     sa.Column('duration_ms', sa.Integer(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.CheckConstraint("status IN ('correct', 'incorrect')", name=op.f('ck_attempts_status_valid')),
     sa.ForeignKeyConstraint(['problem_id'], ['problems.id'], name=op.f('fk_attempts_problem_id_problems'), ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['skill_id'], ['skills.id'], name=op.f('fk_attempts_skill_id_skills')),
@@ -147,16 +157,16 @@ def upgrade() -> None:
     op.create_index(op.f('ix_attempts_user_id'), 'attempts', ['user_id'], unique=False)
     op.create_index(op.f('ix_attempts_worksheet_item_id'), 'attempts', ['worksheet_item_id'], unique=False)
     op.create_table('mistake_tags',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('attempt_id', sa.UUID(), nullable=False),
-    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('attempt_id', sa.Uuid(), nullable=False),
+    sa.Column('user_id', sa.Uuid(), nullable=False),
     sa.Column('skill_id', sa.String(length=120), nullable=False),
     sa.Column('tag', sa.String(length=60), nullable=False),
     sa.Column('category', sa.String(length=20), nullable=False),
     sa.Column('step_id', sa.String(length=60), nullable=True),
     sa.Column('evidence', sa.String(length=160), nullable=False),
     sa.Column('where_to_look', sa.Text(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['attempt_id'], ['attempts.id'], name=op.f('fk_mistake_tags_attempt_id_attempts'), ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['skill_id'], ['skills.id'], name=op.f('fk_mistake_tags_skill_id_skills')),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('fk_mistake_tags_user_id_users'), ondelete='CASCADE'),

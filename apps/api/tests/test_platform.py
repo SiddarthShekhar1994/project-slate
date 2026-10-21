@@ -3,20 +3,66 @@ method and which voice provider the keys select."""
 
 import math
 import multiprocessing as mp
+import os
+import sys
+import time
 from types import SimpleNamespace
+
+import pytest
 
 from slate_api.services import sandbox, tts
 
 
-def test_sandbox_falls_back_to_spawn_without_forkserver(monkeypatch):
-    # Windows has only "spawn"; the grading sandbox must still work there.
+@pytest.fixture
+def windows_sandbox(monkeypatch):
+    """The sandbox as it runs on Windows: no forkserver, so the warm spawn pool."""
     monkeypatch.setattr(sandbox, "_ctx", None)
+    monkeypatch.setattr(sandbox, "_the_pool", None)
     monkeypatch.setattr(mp, "get_all_start_methods", lambda: ["spawn"])
-    monkeypatch.setattr(sandbox, "get_settings", lambda: SimpleNamespace(sandbox="process", grading_timeout_s=60))
-    assert sandbox._context().get_start_method() == "spawn"
-    assert sandbox.run(math.factorial, 5) == 120
+    monkeypatch.setattr(sandbox, "get_settings", lambda: SimpleNamespace(sandbox="process", grading_timeout_s=30))
+    yield sandbox
+    pool = sandbox._the_pool
+    if pool is not None:
+        while not pool.idle.empty():
+            pool.idle.get().stop()
 
 
+def test_windows_pool_grades_in_a_warm_reused_worker(windows_sandbox):
+    assert windows_sandbox._context().get_start_method() == "spawn"
+    # Starting a worker imports SymPy, which takes longer than this limit; it
+    # must not count against the task's own time.
+    first = windows_sandbox.run(os.getpid, timeout=0.5)
+    assert first != os.getpid()
+    assert windows_sandbox.run(math.factorial, 5, timeout=0.5) == 120
+    # The pool keeps warm workers around: later calls land on one of them.
+    pids = {windows_sandbox.run(os.getpid, timeout=0.5) for _ in range(6)}
+    assert len(pids) <= sandbox.POOL_SIZE + 1
+
+
+def test_windows_pool_kills_a_runaway_task_and_recovers(windows_sandbox):
+    windows_sandbox.run(os.getpid)  # warm
+    with pytest.raises(sandbox.SandboxTimeout):
+        windows_sandbox.run(time.sleep, 5, timeout=0.3)
+    assert windows_sandbox.run(math.factorial, 4, timeout=5) == 24
+
+
+def test_windows_pool_reports_errors(windows_sandbox):
+    with pytest.raises(sandbox.SandboxError, match="ValueError"):
+        windows_sandbox.run(math.sqrt, -1)
+    assert windows_sandbox.run(math.sqrt, 16) == 4.0
+
+
+def test_windows_pool_grades_a_real_answer(windows_sandbox):
+    from slate_api.services.grading import grade_answer
+    from slate_api.services.problem_gen import generate
+
+    problem = generate("calc1.derivatives.power_rule", 1, 7)
+    key = str(problem.built.key).replace("**", "^")
+    assert windows_sandbox.run(grade_answer, problem, key).status == "correct"
+    assert windows_sandbox.run(grade_answer, problem, key + " + 1").status == "incorrect"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no forkserver to select")
 def test_sandbox_uses_forkserver_where_it_exists(monkeypatch):
     monkeypatch.setattr(sandbox, "_ctx", None)
     monkeypatch.setattr(mp, "get_all_start_methods", lambda: ["fork", "spawn", "forkserver"])

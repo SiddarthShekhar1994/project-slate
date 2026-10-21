@@ -59,9 +59,16 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 @router.get("/session")
 def session(request: Request, db: Session = Depends(get_db)) -> dict:
-    """The signed-in user, or null. Never 401, so a signed-out page load is quiet."""
-    user = auth.user_for_token(db, request.cookies.get(get_settings().session_cookie))
-    return {"user": _user_view(user) if user else None}
+    """The signed-in user, or null. Never 401, so a signed-out page load is quiet.
+
+    ``desktop`` tells the web app it is running inside the Windows app: no
+    sign-in screens, a Settings page for API keys.
+    """
+    settings = get_settings()
+    if settings.desktop:
+        return {"user": _user_view(auth.local_user(db)), "desktop": True}
+    user = auth.user_for_token(db, request.cookies.get(settings.session_cookie))
+    return {"user": _user_view(user) if user else None, "desktop": False}
 
 
 @router.get("/me")

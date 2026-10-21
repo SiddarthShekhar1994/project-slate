@@ -5,17 +5,27 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useS
 import { api } from "./api";
 import type { User } from "./types";
 
-type SessionState = { user: User | null; loading: boolean; refresh: () => Promise<void>; signOut: () => Promise<void> };
+type SessionState = {
+  user: User | null;
+  /** Running inside the Windows app: one local profile, no sign-in, keys on the Settings page. */
+  desktop: boolean;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
+};
 
 const SessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [desktop, setDesktop] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      setUser((await api.session()).user);
+      const session = await api.session();
+      setUser(session.user);
+      setDesktop(session.desktop);
     } catch (error) {
       console.error(error);
       setUser(null);
@@ -33,7 +43,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     api
       .session()
-      .then(({ user }) => !cancelled && setUser(user))
+      .then((session) => {
+        if (cancelled) return;
+        setUser(session.user);
+        setDesktop(session.desktop);
+      })
       .catch((error) => {
         console.error(error);
         if (!cancelled) setUser(null);
@@ -44,7 +58,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <SessionContext.Provider value={{ user, loading, refresh, signOut }}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={{ user, desktop, loading, refresh, signOut }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(): SessionState {

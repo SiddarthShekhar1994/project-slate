@@ -24,3 +24,8 @@ test-results/
 var/
 *.log
 .DS_Store
+
+# Desktop app build output
+apps/desktop/build/
+apps/desktop/dist/
+apps/desktop/test-results/

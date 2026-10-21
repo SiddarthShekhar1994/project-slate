@@ -6,11 +6,10 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import CheckConstraint, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, timestamp_column, uuid_column
+from .base import GUID, Base, JSONType, UTCDateTime, timestamp_column, uuid_column
 
 SOURCE_KINDS = ("slides", "textbook", "syllabus", "exam", "notes", "other")
 SOURCE_STATUSES = ("processing", "ready", "failed")
@@ -27,7 +26,7 @@ class Source(Base):
     )
 
     id: Mapped[uuid.UUID] = uuid_column()
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     filename: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -40,7 +39,7 @@ class Source(Base):
     pages: Mapped[int | None] = mapped_column(Integer)
     ocr_method: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = timestamp_column()
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     chunks: Mapped[list[SourceChunk]] = relationship(back_populates="source", cascade="all, delete-orphan",
                                                      order_by="SourceChunk.ordinal")
@@ -57,14 +56,14 @@ class SourceChunk(Base):
     __tablename__ = "source_chunks"
 
     id: Mapped[uuid.UUID] = uuid_column()
-    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sources.id", ondelete="CASCADE"),
+    source_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("sources.id", ondelete="CASCADE"),
                                                  nullable=False, index=True)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     heading: Mapped[str] = mapped_column(String(300), nullable=False, default="")
     locator: Mapped[str] = mapped_column(String(120), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    skills: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False, default=dict)
-    notation: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    skills: Mapped[dict[str, float]] = mapped_column(JSONType, nullable=False, default=dict)
+    notation: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False, default=dict)
     top_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     source: Mapped[Source] = relationship(back_populates="chunks")
@@ -77,10 +76,10 @@ class Citation(Base):
     __table_args__ = (CheckConstraint("(lesson_id IS NULL) <> (problem_id IS NULL)", name="one_target"),)
 
     id: Mapped[uuid.UUID] = uuid_column()
-    chunk_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("source_chunks.id", ondelete="CASCADE"),
+    chunk_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("source_chunks.id", ondelete="CASCADE"),
                                                 nullable=False, index=True)
-    lesson_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("lessons.id", ondelete="CASCADE"),
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(GUID, ForeignKey("lessons.id", ondelete="CASCADE"),
                                                         index=True)
-    problem_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True),
+    problem_id: Mapped[uuid.UUID | None] = mapped_column(GUID,
                                                          ForeignKey("problems.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = timestamp_column()

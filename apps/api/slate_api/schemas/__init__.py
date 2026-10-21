@@ -69,3 +69,12 @@ class ExamAnswerIn(BaseModel):
 class ReviewIn(BaseModel):
     # Defaults to every skill that is due.
     skill_ids: list[str] | None = Field(default=None, max_length=8)
+
+
+class SettingsIn(BaseModel):
+    # Omitted fields are left alone; an empty string clears the setting.
+    anthropic_api_key: str | None = Field(default=None, max_length=300)
+    elevenlabs_api_key: str | None = Field(default=None, max_length=300)
+    openai_api_key: str | None = Field(default=None, max_length=300)
+    tts_provider: str | None = Field(default=None, max_length=20)
+    stt_provider: str | None = Field(default=None, max_length=20)

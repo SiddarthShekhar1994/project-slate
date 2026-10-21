@@ -78,19 +78,36 @@ export function LessonPlayer({ lesson, initialStep, initialSpeed, initialVoice, 
   const timings = useMemo(() => timingsFor(step), [timingsFor, step]);
   const duration = useMemo(() => stepDuration(steps[step], timings), [steps, step, timings]);
 
-  // Fetch (and the server caches) audio for this step and the next.
+  // Fetch (and the server caches) audio for this step and the next. Requests
+  // in flight are tracked per step and left running when other audio arrives:
+  // cancelling them on every update could drop a response mid-read, and
+  // nothing would ask for that step again.
+  const inflight = useRef(new Map<string, AbortController>());
   useEffect(() => {
     if (!voice) return;
-    const controller = new AbortController();
     for (const s of [step, step + 1]) {
-      if (s >= steps.length || audio[`${voice}:${s}`]) continue;
+      const key = `${voice}:${s}`;
+      if (s >= steps.length || audio[key] || inflight.current.has(key)) continue;
+      const controller = new AbortController();
+      inflight.current.set(key, controller);
       api
         .stepAudio(lesson.id, s, voice, controller.signal)
-        .then((result) => setAudio((prev) => ({ ...prev, [`${voice}:${s}`]: result })))
-        .catch(() => undefined);
+        .then((result) => setAudio((prev) => ({ ...prev, [key]: result })))
+        .catch(() => undefined)
+        .finally(() => {
+          if (inflight.current.get(key) === controller) inflight.current.delete(key);
+        });
     }
-    return () => controller.abort();
   }, [voice, step, steps.length, lesson.id, audio]);
+
+  // A different voice or lesson makes pending requests pointless.
+  useEffect(() => {
+    const pending = inflight.current;
+    return () => {
+      for (const controller of pending.values()) controller.abort();
+      pending.clear();
+    };
+  }, [voice, lesson.id]);
 
   // Keep the URL in step with what is on screen.
   useEffect(() => {

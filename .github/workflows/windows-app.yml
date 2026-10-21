@@ -1,0 +1,99 @@
+# Builds the Slate Windows installer, installs it on a clean Windows machine
+# and drives the installed app end to end. The installer is attached to every
+# run (Actions tab -> the run -> Artifacts) and, for version tags like v0.1.0,
+# to a GitHub Release.
+name: Windows app
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Build, install and test on Windows
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # only used to attach the installer to a release on tags
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Python packages
+        run: uv sync --all-packages --group desktop --frozen
+
+      - name: Python tests on Windows, against SQLite (the app's database)
+        run: |
+          tmp="$(cygpath -m "$RUNNER_TEMP")"
+          export TEST_DATABASE_URL="sqlite:///$tmp/slate_test.db"
+          export STORAGE_DIR="$tmp/slate-test-storage"
+          uv run pytest -q -p no:cacheprovider
+
+      - name: Build the interface and the backend
+        run: node apps/desktop/scripts/build.mjs
+
+      - name: Package the installer
+        run: |
+          pnpm --dir apps/desktop install --frozen-lockfile
+          pnpm --dir apps/desktop exec electron-builder --win --x64 --publish never
+
+      - name: Install it silently, as a student would
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/dist/Slate-Setup-*.exe | Select-Object -First 1
+          Write-Host "Installing $($installer.Name) ($([math]::Round($installer.Length / 1MB)) MB)"
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          if (-not (Test-Path "$env:LOCALAPPDATA\Programs\Slate\Slate.exe")) { throw "Slate.exe was not installed" }
+
+      - name: Test the installed app
+        run: |
+          export SLATE_APP_PATH="$(cygpath -m "$LOCALAPPDATA")/Programs/Slate/Slate.exe"
+          export TEMP="$RUNNER_TEMP" TMP="$RUNNER_TEMP"  # so a failed run's app logs can be collected below
+          pnpm --dir apps/desktop test
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Slate-Windows-installer
+          path: apps/desktop/dist/Slate-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Keep logs from a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs
+          path: |
+            apps/desktop/test-results
+            ${{ runner.temp }}/slate-desktop-test-*/logs
+          if-no-files-found: ignore
+
+      - name: Attach the installer to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Slate $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" apps/desktop/dist/Slate-Setup-*.exe --clobber

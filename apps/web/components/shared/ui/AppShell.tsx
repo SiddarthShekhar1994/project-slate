@@ -12,6 +12,9 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/progress", label: "Progress", icon: "progress" },
 ];
 
+// The desktop app has no server to configure, so API keys get a page of their own.
+const DESKTOP_NAV = [...NAV, { href: "/settings", label: "Settings", icon: "settings" as IconName }];
+
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -20,8 +23,17 @@ function isActive(pathname: string, href: string) {
  * Left rail on wide screens, bottom tab bar on phones. The skip link jumps
  * past the navigation for keyboard and screen reader users.
  */
-export function AppShell({ children, userName }: { children: ReactNode; userName?: string | null }) {
+export function AppShell({
+  children,
+  userName,
+  desktop = false,
+}: {
+  children: ReactNode;
+  userName?: string | null;
+  desktop?: boolean;
+}) {
   const pathname = usePathname() ?? "";
+  const nav = desktop ? DESKTOP_NAV : NAV;
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
       <a
@@ -42,7 +54,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           <span className="text-lg font-bold tracking-tight text-text">Slate</span>
         </Link>
         <ul className="flex flex-col gap-1">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <li key={item.href}>
@@ -60,10 +72,14 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             );
           })}
         </ul>
-        {userName && (
-          <p className="mt-auto truncate px-3 text-xs text-muted" title={userName}>
-            Signed in as {userName}
-          </p>
+        {desktop ? (
+          <p className="mt-auto px-3 text-xs text-muted">Everything stays on this computer.</p>
+        ) : (
+          userName && (
+            <p className="mt-auto truncate px-3 text-xs text-muted" title={userName}>
+              Signed in as {userName}
+            </p>
+          )
         )}
       </nav>
 
@@ -82,8 +98,8 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       >
-        <ul className="grid grid-cols-4">
-          {NAV.map((item) => {
+        <ul className={`grid ${desktop ? "grid-cols-5" : "grid-cols-4"}`}>
+          {nav.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <li key={item.href}>

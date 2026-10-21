@@ -7,7 +7,7 @@ import { Spinner } from "./Spinner";
 
 /** App chrome for signed-in pages; signed-out visitors are sent to /login. */
 export function SignedInShell({ children }: { children: ReactNode }) {
-  const { user, loading } = useRequireUser();
+  const { user, desktop, loading } = useRequireUser();
   if (loading || !user) {
     return (
       <div className="grid min-h-dvh place-items-center">
@@ -15,5 +15,9 @@ export function SignedInShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  return <AppShell userName={user.display_name}>{children}</AppShell>;
+  return (
+    <AppShell userName={user.display_name} desktop={desktop}>
+      {children}
+    </AppShell>
+  );
 }

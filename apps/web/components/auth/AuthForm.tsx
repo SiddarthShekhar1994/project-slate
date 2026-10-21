@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
@@ -27,10 +27,15 @@ export function safeNext(raw: string | null, origin?: string): string {
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const search = useSearchParams();
-  const { refresh } = useSession();
+  const { refresh, desktop } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const next = safeNext(search?.get("next") ?? null);
+
+  // The desktop app has no accounts: go straight in.
+  useEffect(() => {
+    if (desktop) router.replace(next);
+  }, [desktop, next, router]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

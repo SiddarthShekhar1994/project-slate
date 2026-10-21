@@ -1,5 +1,7 @@
 import type {
   AnswerResponse,
+  AppSettings,
+  SettingsChanges,
   AskAnswer,
   LessonSummary,
   LessonView,
@@ -63,7 +65,7 @@ const post = <T>(path: string, data?: unknown) =>
 
 export const api = {
   me: () => request<User>("/auth/me"),
-  session: () => request<{ user: User | null }>("/auth/session"),
+  session: () => request<{ user: User | null; desktop: boolean }>("/auth/session"),
   signup: (email: string, password: string, display_name: string) =>
     post<User>("/auth/signup", { email, password, display_name }),
   login: (email: string, password: string) => post<User>("/auth/login", { email, password }),
@@ -112,6 +114,10 @@ export const api = {
       body: JSON.stringify({ answer }),
     }),
   finishExam: (id: string) => post<ExamView>(`/exam/${id}/finish`),
+
+  settings: () => request<AppSettings>("/settings"),
+  saveSettings: (changes: SettingsChanges) =>
+    request<AppSettings>("/settings", { method: "PUT", body: JSON.stringify(changes) }),
 
   voiceStatus: () => request<{ available: boolean; provider: string | null }>("/voice"),
   transcribe: (audio: Blob) => {

@@ -16,9 +16,9 @@ from pathlib import Path
 
 from slate_skills import get_skill, skill_owner
 from sqlalchemy import or_, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from ..db import upsert
 from ..models import CheckpointAnswer, Citation, Lesson, LessonProgress, User
 from . import tts
 from .mastery import skill_mastery
@@ -61,7 +61,7 @@ def sync_builtin_lessons(db: Session, directory: Path = BUILTIN_DIR) -> list[str
             "kind": "builtin", "slug": slug, "title": script["title"], "summary": script.get("summary", ""),
             "script": script, "verification": record, "verified_at": _now(),
         }
-        stmt = insert(Lesson).values(values)
+        stmt = upsert(db, Lesson).values(values)
         stmt = stmt.on_conflict_do_update(
             index_elements=[Lesson.slug],
             set_={k: stmt.excluded[k] for k in ("skill_id", "title", "summary", "script", "verification", "verified_at")},
@@ -157,7 +157,7 @@ def _step(lesson: Lesson, index: int) -> dict:
 
 def save_progress(db: Session, user: User, lesson: Lesson, step: int) -> None:
     _step(lesson, step)
-    stmt = insert(LessonProgress).values(user_id=user.id, lesson_id=lesson.id, step=step, updated_at=_now())
+    stmt = upsert(db, LessonProgress).values(user_id=user.id, lesson_id=lesson.id, step=step, updated_at=_now())
     stmt = stmt.on_conflict_do_update(
         index_elements=[LessonProgress.user_id, LessonProgress.lesson_id],
         set_={"step": stmt.excluded.step, "updated_at": stmt.excluded.updated_at},

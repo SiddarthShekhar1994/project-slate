@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models import AuthSession, User
@@ -20,8 +22,28 @@ _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
 MIN_PASSWORD = 8
 
 
+# The desktop app has one profile and no sign-in. Its user row is ordinary, so
+# everything else works unchanged; the password is random and never used.
+LOCAL_EMAIL = "you@slate.local"
+
+
 class AuthError(ValueError):
     pass
+
+
+def local_user(db: Session) -> User:
+    user = db.scalar(select(User).where(User.email == LOCAL_EMAIL))
+    if user is not None:
+        return user
+    name = (os.environ.get("SLATE_USER_NAME") or "").strip()[:80] or "there"
+    user = User(email=LOCAL_EMAIL, display_name=name, password_hash=hash_password(secrets.token_urlsafe(32)))
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:  # two first requests at once: the other one created it
+        db.rollback()
+        user = db.scalars(select(User).where(User.email == LOCAL_EMAIL)).one()
+    return user
 
 
 def hash_password(password: str) -> str:

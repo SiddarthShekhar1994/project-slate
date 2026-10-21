@@ -10,7 +10,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
-    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -18,10 +17,17 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, timestamp_column, uuid_column
+from .base import (
+    GUID,
+    Base,
+    JSONType,
+    UTCDateTime,
+    timestamp_column,
+    uuid_column,
+    verified_ok_constraints,
+)
 
 # "missed" is only used in exam pace, where a wrong or blank answer gets no retry.
 ITEM_STATUSES = ("up_next", "retrying", "cleared", "cleared_after_retry", "missed")
@@ -38,31 +44,31 @@ class Problem(Base):
 
     __tablename__ = "problems"
     __table_args__ = (
-        CheckConstraint("(verification ->> 'ok') = 'true'", name="verified_ok"),
+        *verified_ok_constraints(),
         CheckConstraint("difficulty BETWEEN 1 AND 4", name="difficulty_range"),
     )
 
     id: Mapped[uuid.UUID] = uuid_column()
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id"), nullable=False, index=True)
     family: Mapped[str] = mapped_column(String(80), nullable=False)
     difficulty: Mapped[int] = mapped_column(Integer, nullable=False)
     seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    params: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
     signature: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     origin: Mapped[str] = mapped_column(String(20), nullable=False, default="template")
-    parent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("problems.id"))
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(GUID, ForeignKey("problems.id"))
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    variables: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    variables: Mapped[list[str]] = mapped_column(JSONType, nullable=False)
     answer_kind: Mapped[str] = mapped_column(String(20), nullable=False)
     key_latex: Mapped[str] = mapped_column(Text, nullable=False)
-    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
-    hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
-    verification: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, nullable=False)
+    hints: Mapped[list[str]] = mapped_column(JSONType, nullable=False)
+    verification: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
+    verified_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     source_chunk_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("source_chunks.id", ondelete="SET NULL")
+        GUID, ForeignKey("source_chunks.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = timestamp_column()
 
@@ -71,18 +77,18 @@ class Worksheet(Base):
     __tablename__ = "worksheets"
 
     id: Mapped[uuid.UUID] = uuid_column()
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
-    skill_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    skill_ids: Mapped[list[str]] = mapped_column(JSONType, nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="practice")
     seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # Exam settings: pace, weights, time limit. Empty for practice and review.
-    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False, default=dict, server_default="{}")
+    ends_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column()
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     items: Mapped[list[WorksheetItem]] = relationship(
         back_populates="worksheet", order_by="WorksheetItem.position", cascade="all, delete-orphan"
@@ -101,20 +107,20 @@ class WorksheetItem(Base):
 
     id: Mapped[uuid.UUID] = uuid_column()
     worksheet_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("worksheets.id", ondelete="CASCADE"), nullable=False, index=True
+        GUID, ForeignKey("worksheets.id", ondelete="CASCADE"), nullable=False, index=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id"), nullable=False)
     difficulty: Mapped[int] = mapped_column(Integer, nullable=False)
-    root_problem_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("problems.id"), nullable=False)
-    current_problem_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("problems.id"),
+    root_problem_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("problems.id"), nullable=False)
+    current_problem_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("problems.id"),
                                                           nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="up_next")
     misses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     problems_served: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     hint_level: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     needs_new_problem: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cleared_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     # Exam pace: the answer as typed, graded only when the exam is handed in.
     exam_answer: Mapped[str | None] = mapped_column(Text)
 
@@ -129,12 +135,12 @@ class Attempt(Base):
     __table_args__ = (CheckConstraint("status IN ('correct', 'incorrect')", name="status_valid"),)
 
     id: Mapped[uuid.UUID] = uuid_column()
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
-    problem_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("problems.id", ondelete="CASCADE"),
+    problem_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("problems.id", ondelete="CASCADE"),
                                                   nullable=False, index=True)
     worksheet_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("worksheet_items.id", ondelete="CASCADE"), index=True
+        GUID, ForeignKey("worksheet_items.id", ondelete="CASCADE"), index=True
     )
     skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id"), nullable=False, index=True)
     raw_input: Mapped[str] = mapped_column(Text, nullable=False)
@@ -158,9 +164,9 @@ class MistakeTag(Base):
 
     id: Mapped[uuid.UUID] = uuid_column()
     attempt_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("attempts.id", ondelete="CASCADE"), nullable=False, unique=True
+        GUID, ForeignKey("attempts.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id"), nullable=False, index=True)
     tag: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
@@ -185,13 +191,13 @@ class SkillCard(Base):
     __table_args__ = (UniqueConstraint("user_id", "skill_id"),)
 
     id: Mapped[uuid.UUID] = uuid_column()
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id"), nullable=False)
     easiness: Mapped[float] = mapped_column(Float, nullable=False)
     interval_days: Mapped[int] = mapped_column(Integer, nullable=False)
     repetitions: Mapped[int] = mapped_column(Integer, nullable=False)
     lapses: Mapped[int] = mapped_column(Integer, nullable=False)
-    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    last_reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    sitting: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, index=True)
+    last_reviewed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    sitting: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)

@@ -304,3 +304,18 @@ export type ExamView = {
 export type ExamCreated =
   | { id: string; pace: "exam"; exam: ExamView }
   | { id: string; pace: "study"; worksheet: Worksheet };
+
+// --- desktop app settings ------------------------------------------------------
+
+export type KeyName = "anthropic_api_key" | "elevenlabs_api_key" | "openai_api_key";
+
+export type AppSettings = {
+  keys: Record<KeyName, { set: boolean; hint: string }>;
+  tts_provider: "" | "elevenlabs" | "openai";
+  stt_provider: "" | "openai" | "elevenlabs";
+  active: { claude: boolean; voice: string | null; transcription: string | null };
+  data_dir: string;
+};
+
+/** Omitted fields stay as they are; an empty string clears a setting. */
+export type SettingsChanges = Partial<Record<KeyName | "tts_provider" | "stt_provider", string>>;

@@ -1,0 +1,7 @@
+# electron downloads its binary in a postinstall script; pnpm 10 only runs the
+# scripts listed here.
+onlyBuiltDependencies:
+  - electron
+# Squirrel installer tooling that electron-builder pulls in; Slate ships an NSIS installer.
+ignoredBuiltDependencies:
+  - electron-winstaller

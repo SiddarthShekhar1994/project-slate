@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
+    <title>Slate</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #0f1115;
+        color: #c3cad6;
+        font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+      }
+      main {
+        display: grid;
+        height: 100%;
+        place-content: center;
+        justify-items: center;
+        gap: 18px;
+      }
+      .mark {
+        display: grid;
+        width: 64px;
+        height: 64px;
+        place-items: center;
+        border-radius: 14px;
+        background: #10241e;
+        color: #f3f1e7;
+        font: 600 36px/1 Georgia, serif;
+      }
+      .bar {
+        width: 160px;
+        height: 4px;
+        overflow: hidden;
+        border-radius: 2px;
+        background: #1f232c;
+      }
+      .bar::after {
+        content: "";
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: 2px;
+        background: #7c9bff;
+        animation: slide 1.2s ease-in-out infinite;
+      }
+      @keyframes slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bar::after {
+          width: 100%;
+          animation: none;
+          opacity: 0.6;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main role="status" aria-live="polite">
+      <div class="mark" aria-hidden="true">S</div>
+      <p>Starting Slate…</p>
+      <div class="bar" aria-hidden="true"></div>
+    </main>
+  </body>
+</html>

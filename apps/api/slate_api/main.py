@@ -9,12 +9,24 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from slate_skills import all_skills, skill_owner
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from .db import get_engine
+from .db import get_engine, upsert
 from .models import Skill
-from .routers import auth, catalog, exam, lessons, math, media, practice, progress, sources, voice
+from .routers import (
+    app_settings,
+    auth,
+    catalog,
+    exam,
+    lessons,
+    math,
+    media,
+    practice,
+    progress,
+    sources,
+    voice,
+)
+from .services import app_settings as app_settings_service
 from .services import sandbox
 from .services.lessons import sync_builtin_lessons
 
@@ -26,7 +38,7 @@ def sync_skills(db: Session) -> None:
         course, unit = skill_owner(skill.id)
         rows.append({"id": skill.id, "course_id": course.id, "unit_id": unit.id, "slug": skill.slug,
                      "title": skill.title, "summary": skill.summary, "position": position})
-    stmt = insert(Skill).values(rows)
+    stmt = upsert(db, Skill).values(rows)
     stmt = stmt.on_conflict_do_update(
         index_elements=[Skill.id],
         set_={c: stmt.excluded[c] for c in ("course_id", "unit_id", "slug", "title", "summary", "position")},
@@ -37,6 +49,7 @@ def sync_skills(db: Session) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app_settings_service.apply_saved()
     sandbox.warm_up()
     with Session(get_engine()) as db:
         sync_skills(db)
@@ -46,7 +59,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Slate API", version="0.1.0", lifespan=lifespan)
-    for module in (auth, catalog, exam, lessons, math, media, practice, progress, sources, voice):
+    for module in (app_settings, auth, catalog, exam, lessons, math, media, practice, progress, sources, voice):
         app.include_router(module.router, prefix="/api")
 
     @app.get("/api/health")

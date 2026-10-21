@@ -51,7 +51,7 @@ test.describe("lesson player", () => {
   });
 
   test("with a voice, the audio drives the board through a step", async ({ page }) => {
-    const voice = page.getByLabel("Voice");
+    const voice = page.getByRole("combobox", { name: /^Voice/ });
     test.skip(!(await voice.isEnabled()), "no TTS provider configured (run the API with TTS_PROVIDER=silent)");
     await expect(page.getByText("Preparing voice…")).toBeHidden({ timeout: 15_000 });
     await page.getByRole("button", { name: "Play" }).click();

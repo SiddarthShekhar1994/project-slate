@@ -4,6 +4,24 @@ Slate is a study app for math courses, built around your own course materials. I
 
 The first course is single-variable calculus (MATH 30 level), starting with the derivative unit: power, product, quotient and chain rules, plus implicit differentiation. Courses are data in `packages/skills`, so adding one doesn't touch the app.
 
+Slate runs as a Windows app (one installer, no sign-in, everything stored on your PC) or as a website.
+
+## The Windows app
+
+Download `Slate-Setup-<version>.exe` from the latest successful [Windows app](../../actions/workflows/windows-app.yml) run (under Artifacts), or from Releases once a version is tagged. Run it and pick where to install. Windows SmartScreen may warn that the publisher is unknown, because the installer isn't code-signed yet: choose "More info", then "Run anyway".
+
+Slate opens straight into your Library. Your library, progress and settings live in `%APPDATA%\Slate\data`, and uninstalling keeps them. Everything works offline without any keys. To turn on Claude-written lessons, the narrated voice and spoken questions, paste API keys on the Settings page.
+
+Under the hood the app is the same code as the website. An Electron window (`apps/desktop`) starts the Python backend, packaged with PyInstaller and storing data in SQLite, and the Next.js interface on free ports on 127.0.0.1. Nothing listens on your network. The GitHub Actions workflow builds the installer on Windows, installs it, and drives the installed app through a practice session before keeping it.
+
+To build it yourself on Windows, with uv, Node 24 and pnpm:
+
+```bash
+pnpm --dir apps/desktop install
+pnpm --dir apps/desktop dist:win      # installer in apps/desktop/dist
+pnpm --dir apps/desktop start         # or run it from source, without packaging
+```
+
 ## How it keeps the math right
 
 - Every answer key is checked by SymPy before anyone sees the problem. Templates derive the key by walking the rule's steps. The verifier then recomputes it independently (`sp.diff`, or the implicit function theorem) and must prove the two equal. A `VerifiedProblem` can only be created after that check passes, and the `problems` table has a check constraint that refuses a row whose stored report doesn't say `ok`.
@@ -35,23 +53,27 @@ apps/
         tts.py            ElevenLabs or OpenAI speech with word timings, cached per step
         stt.py            spoken questions: OpenAI or ElevenLabs transcription
         photo.py          reads the final answer from a photo of the student's work
+        app_settings.py   API keys entered in the Windows app's Settings page
         llm.py            the single Claude API wrapper
-        sandbox.py        grading in a killable child process
+        sandbox.py        grading in a killable child process (warm worker pool on Windows)
         storage.py        local disk or S3 for uploads and audio
-      models/             SQLAlchemy models; migrations/ holds Alembic revisions
+      models/             SQLAlchemy models (PostgreSQL or SQLite); migrations/ holds Alembic revisions
+      desktop.py          the Windows app's backend entry point
       lessons/builtin/    hand-written lesson scripts (JSON)
     tests/
   web/                    Next.js 16 + TypeScript + Tailwind 4 + KaTeX
     app/                  routes: /library, /lesson/[id], /practice/[id], /progress, /progress/exam,
-                          /progress/formulas, /exam/[id], /login
+                          /progress/formulas, /exam/[id], /settings, /login
     components/           grouped by page, plus shared/board, shared/math, shared/ui
     lib/lesson/           lesson script types and the timeline engine
+    proxy.ts              forwards /api to the backend, at whatever address API_ORIGIN names
+  desktop/                the Windows app: Electron shell (main.js), PyInstaller recipe, installer build
 packages/
   skills/                 one Python module per skill: families, steps, mistakes, hints, formula
 scripts/                  setup.sh, start.sh, check_skill.py, e2e_keys.py, dev-restart.sh (test helper)
 ```
 
-## Running it locally
+## Running the website locally
 
 You need:
 
@@ -116,7 +138,10 @@ uv run python scripts/check_skill.py calc1.derivatives.chain_rule --seeds 100
 pnpm --dir apps/web test                        # Vitest: KaTeX, timeline engine, captions
 pnpm --dir apps/web exec playwright install chromium   # once, for the end-to-end tests
 pnpm --dir apps/web e2e                         # Playwright, desktop and phone
+pnpm --dir apps/desktop test                    # the desktop app, driven through Electron
 ```
+
+`TEST_DATABASE_URL` can also name a SQLite file, such as `sqlite:////tmp/slate_test.db`; that's how the Windows build runs the suite.
 
 The API tests drop and rebuild the schema of `slate_test`, which Docker creates for you. They never use `DATABASE_URL`. To point them elsewhere, set `TEST_DATABASE_URL` to a database whose name ends in `_test`. The tests also ignore any API keys in your shell, so they never call paid APIs.
 

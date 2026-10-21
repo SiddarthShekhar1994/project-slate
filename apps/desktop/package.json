@@ -1,0 +1,80 @@
+{
+  "name": "slate-desktop",
+  "productName": "Slate",
+  "version": "0.1.0",
+  "description": "Slate, a study app for math courses, as a Windows app.",
+  "author": "Slate",
+  "private": true,
+  "main": "main.js",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build.mjs",
+    "dist:win": "node scripts/build.mjs && electron-builder --win --x64 --publish never",
+    "dist:dir": "node scripts/build.mjs && electron-builder --dir --publish never",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "electron": "44.6.0",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "app.slate.desktop",
+    "productName": "Slate",
+    "copyright": "Slate",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "main.js",
+      "loading.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build",
+        "to": ".",
+        "filter": [
+          "web/**/*",
+          "web/**/.*",
+          "web/**/.*/**/*",
+          "backend/**/*",
+          "backend/**/.*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Slate",
+      "artifactName": "Slate-Setup-${version}.exe"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build-resources/icon.png",
+      "category": "Education"
+    },
+    "publish": null
+  },
+  "packageManager": "pnpm@10.28.0"
+}

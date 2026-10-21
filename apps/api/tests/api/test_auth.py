@@ -33,6 +33,6 @@ def test_practice_requires_sign_in(client):
 
 
 def test_session_endpoint_is_quiet_when_signed_out(client):
-    assert client.get("/api/auth/session").json() == {"user": None}
+    assert client.get("/api/auth/session").json() == {"user": None, "desktop": False}
     client.post("/api/auth/signup", json={"email": "e@f.co", "password": "longenough"})
     assert client.get("/api/auth/session").json()["user"]["email"] == "e@f.co"
