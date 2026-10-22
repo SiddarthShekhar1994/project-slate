@@ -14,13 +14,24 @@ Slate opens straight into your Library. Your library, progress and settings live
 
 Under the hood the app is the same code as the website. An Electron window (`apps/desktop`) starts the Python backend, packaged with PyInstaller and storing data in SQLite, and the Next.js interface on free ports on 127.0.0.1. Nothing listens on your network. The GitHub Actions workflow builds the installer on Windows, installs it, and drives the installed app through a practice session before keeping it.
 
-To build it yourself on Windows, with uv, Node 24 and pnpm:
+### Running it from source on Windows
 
-```bash
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), Node 24 LTS from [nodejs.org](https://nodejs.org) and pnpm 10. Install pnpm with `npm install -g pnpm@10`, then open a new PowerShell window so it can be found. Run everything in PowerShell, not WSL:
+
+```powershell
+git clone https://github.com/SiddarthShekhar1994/project-slate.git
+cd project-slate
+uv sync --all-packages
+pnpm --dir apps/web install
 pnpm --dir apps/desktop install
-pnpm --dir apps/desktop dist:win      # installer in apps/desktop/dist
-pnpm --dir apps/desktop start         # or run it from source, without packaging
+pnpm --dir apps/desktop start     # opens the app; closing the window stops everything
 ```
+
+Next time, `pnpm --dir apps/desktop start` is all you need. There's no database to set up: the backend creates its SQLite tables when it starts. Run from source, the app keeps its data in `%APPDATA%\Slate (development)`, apart from the installed app's, and writes `backend.log` and `web.log` to the `logs` folder there. The interface runs in development mode, so each page takes a few seconds the first time it opens.
+
+If PowerShell says running scripts is disabled on this system, it's blocking pnpm's launcher. Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and try again.
+
+To build the installer yourself, run `pnpm --dir apps/desktop dist:win`. It lands in `apps/desktop/dist`.
 
 ## How it keeps the math right
 
@@ -78,7 +89,7 @@ scripts/                  setup.sh, start.sh, check_skill.py, e2e_keys.py, dev-r
 You need:
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (it installs Python for you)
-- Node 24 LTS, or Node 22.22.2 or newer, with pnpm 10: run `corepack enable` once (Node 25 and later don't include corepack; use `npm install -g pnpm@10` there)
+- Node 24 LTS, or Node 22.22.2 or newer, and pnpm 10 (`npm install -g pnpm@10`)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for the database, or your own PostgreSQL 16 (see "Without Docker" below)
 
 It runs on macOS and Linux. On Windows, use WSL2: install Ubuntu from the Microsoft Store, turn on WSL integration in Docker Desktop's settings, clone the repo inside your Linux home folder (not under `/mnt/c`), and run every command in the Ubuntu terminal.
