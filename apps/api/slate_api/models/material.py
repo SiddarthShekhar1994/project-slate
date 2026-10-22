@@ -6,29 +6,47 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import GUID, Base, JSONType, timestamp_column, uuid_column
 
 MATERIAL_STATUSES = ("ready", "unchecked", "unsupported")
 MATERIAL_ORIGINS = ("sheet", "variant")
+TOPIC_ORIGINS = ("upload", "added")
 
 
 class Topic(Base):
-    """A topic from a student's materials that no built-in skill covers (related rates, say).
+    """One of the student's own topics: found in their uploads (related rates, say) or added by name.
 
     It has a row in ``skills`` with the same id, so attempts, mistake tags and
-    review cards point at it like at any skill.
+    review cards point at it like at any skill. ``build`` tracks the lesson and
+    problems Slate writes for it in the background.
     """
 
     __tablename__ = "topics"
+    __table_args__ = (CheckConstraint(f"origin IN {TOPIC_ORIGINS}", name="origin_valid"),)
 
     id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    origin: Mapped[str] = mapped_column(String(20), nullable=False, default="upload", server_default="upload")
+    build: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    created_at: Mapped[datetime] = timestamp_column()
+
+
+class TopicPin(Base):
+    """A built-in skill (the chain rule, say) on the student's dashboard as one of their topics."""
+
+    __tablename__ = "topic_pins"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    skill_id: Mapped[str] = mapped_column(String(120), ForeignKey("skills.id", ondelete="CASCADE"),
+                                          primary_key=True)
+    build: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
     created_at: Mapped[datetime] = timestamp_column()
 
 

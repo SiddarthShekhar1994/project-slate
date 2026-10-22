@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { PracticeHome } from "@/components/practice/PracticeHome";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Practice" };
-
+/** Practice lives on each topic's page now. */
 export default function PracticePage() {
-  return <PracticeHome />;
+  redirect("/dashboard");
 }

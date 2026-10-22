@@ -14,7 +14,7 @@ describe("safeNext", () => {
   it.each([null, "", "https://evil.com", "//evil.com", "/\\evil.com", "/\\/evil.com", "javascript:alert(1)", "\\\\evil.com"])(
     "rejects %s",
     (raw) => {
-      expect(safeNext(raw, ORIGIN)).toBe("/library");
+      expect(safeNext(raw, ORIGIN)).toBe("/dashboard");
     },
   );
 });

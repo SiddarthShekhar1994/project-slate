@@ -1,6 +1,9 @@
 /** Small inline icons drawn with strokes so they inherit the text colour. */
 const PATHS = {
   library: "M4 5h4v14H4zM10 5h4v14h-4zM16.5 5.5l3.5 1-3.5 13-3.5-1z",
+  dashboard: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  plus: "M12 5v14M5 12h14",
+  trash: "M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
   lesson: "M4 5h16v11H4zM8 20h8M12 16v4",
   practice: "M5 4h10l4 4v12H5zM9 12h6M9 16h4",
   progress: "M5 19V11M12 19V5M19 19v-6",

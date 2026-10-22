@@ -1,12 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { signUp } from "./helpers";
+import { openChainRuleLesson, signUp } from "./helpers";
 
 test.describe("lesson player", () => {
   test.beforeEach(async ({ page }) => {
     await signUp(page);
-    await page.goto("/lesson");
-    await page.getByRole("link", { name: /Start lesson/ }).first().click();
-    await expect(page).toHaveURL(/\/lesson\/[0-9a-f-]+/);
+    await openChainRuleLesson(page);
     await expect(page.getByRole("heading", { level: 1, name: "The chain rule" })).toBeVisible();
   });
 

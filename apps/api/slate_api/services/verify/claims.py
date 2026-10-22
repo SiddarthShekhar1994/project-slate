@@ -6,6 +6,13 @@ facts as claims in Slate's answer syntax:
 ``{"kind": "derivative", "of": "sin(x^3 + 1)", "var": "x", "equals": "3x^2 cos(x^3 + 1)"}``
 (optional ``"vars"`` lists other symbols the expressions use)
 ``{"kind": "equal", "left": "...", "right": "...", "vars": ["x"]}``
+``{"kind": "limit", "of": "sin(x)/x", "var": "x", "to": "0", "side": "both", "equals": "1"}``
+(``to`` may be ``oo`` or ``-oo``; ``equals`` may be ``oo``, ``-oo`` or ``DNE``)
+``{"kind": "integral", "of": "2x", "var": "x", "equals": "x^2"}`` (an antiderivative,
+checked up to a constant) or with ``"lower"`` and ``"upper"`` for a definite integral.
+
+Limits and integrals are computed by the same SymPy oracles that key the
+problems read from a student's materials.
 
 Checkpoints ("pause and predict") carry an ``expect`` claim plus one value per
 option: the correct option must equal the expected answer and every other
@@ -15,14 +22,14 @@ option must be provably different, so a distractor can never be secretly right.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import sympy as sp
 
 from .equivalence import equivalent
 from .parse import ParseError, parse_answer
 
-ALLOWED_VARS = ("x", "y", "t", "u", "r", "v")
+ALLOWED_VARS = ("x", "y", "t", "u", "r", "v", "s", "w", "z", "h")
 
 
 @dataclass(frozen=True)
@@ -30,6 +37,16 @@ class ClaimResult:
     where: str
     ok: bool
     detail: str = ""
+
+
+@dataclass(frozen=True)
+class Sides:
+    """A claim's stated value, the true value, and how to compare values of its kind."""
+
+    stated: sp.Basic
+    truth: sp.Basic
+    read: Callable[[str], sp.Basic]
+    same: Callable[[sp.Basic, sp.Basic], bool | None]
 
 
 def _symbols(names: list[str]) -> list[sp.Symbol]:
@@ -43,52 +60,111 @@ def _parse(text: str, names: list[str]) -> sp.Expr:
     return parse_answer(text, _symbols(names)).expr
 
 
-def _sides(claim: dict[str, Any]) -> tuple[sp.Expr, sp.Expr, list[sp.Symbol]]:
-    """Return (stated value, true value, symbols) for a claim."""
+def _names(claim: dict[str, Any]) -> list[str]:
+    var = claim.get("var") or "x"
+    return list(dict.fromkeys([var, *claim.get("vars", [])]))
+
+
+def _equal(symbols: list[sp.Symbol]) -> Callable[[sp.Basic, sp.Basic], bool | None]:
+    return lambda a, b: equivalent(a, b, symbols).equal
+
+
+def _limit_sides(claim: dict[str, Any]) -> Sides:
+    from ..materials.answers import limit_value
+    from ..materials.kinds import DNE, SpecError, read
+
+    spec = {"kind": "limit", "expr": claim["of"], "var": claim.get("var") or "x", "to": claim["to"],
+            "side": claim.get("side") or "both"}
+    try:
+        truth = read(spec).oracle()
+    except SpecError as exc:
+        raise ParseError(str(exc)) from None
+    special = (DNE, sp.oo, -sp.oo)
+
+    def same(a: sp.Basic, b: sp.Basic) -> bool | None:
+        if a in special or b in special:
+            return a == b
+        return equivalent(a, b, []).equal
+
+    return Sides(limit_value(claim["equals"]), truth, limit_value, same)
+
+
+def _integral_sides(claim: dict[str, Any]) -> Sides:
+    from ..materials.kinds import SpecError, read
+
+    names = _names(claim)
+    var = sp.Symbol(names[0])
+    definite = bool(str(claim.get("lower", "")).strip() or str(claim.get("upper", "")).strip())
+    spec = {"kind": "definite_integral" if definite else "antiderivative", "expr": claim["of"], "var": names[0],
+            "lower": claim.get("lower", ""), "upper": claim.get("upper", "")}
+    try:
+        truth = read(spec).oracle()
+    except SpecError as exc:
+        raise ParseError(str(exc)) from None
+    symbols = _symbols(names)
+
+    def read_value(text: str) -> sp.Basic:
+        return _parse(str(text).replace("+ C", "").replace("+C", ""), names)
+
+    if definite:
+        return Sides(read_value(claim["equals"]), truth, read_value, _equal(symbols))
+
+    def same(a: sp.Basic, b: sp.Basic) -> bool | None:
+        # Antiderivatives agree when they differ by a constant.
+        return equivalent(sp.diff(a, var), sp.diff(b, var), symbols).equal
+
+    return Sides(read_value(claim["equals"]), truth, read_value, same)
+
+
+def _sides(claim: dict[str, Any]) -> Sides:
     kind = claim.get("kind")
     if kind == "derivative":
-        var = claim["var"]
-        names = list(dict.fromkeys([var, *claim.get("vars", [])]))
+        names = _names(claim)
         of = _parse(claim["of"], names)
-        stated = _parse(claim["equals"], names)
-        return stated, sp.diff(of, sp.Symbol(var)), _symbols(names)
+        symbols = _symbols(names)
+        return Sides(_parse(claim["equals"], names), sp.diff(of, sp.Symbol(names[0])),
+                     lambda text: _parse(text, names), _equal(symbols))
     if kind == "equal":
         names = list(claim.get("vars", []))
-        return _parse(claim["left"], names), _parse(claim["right"], names), _symbols(names)
+        symbols = _symbols(names)
+        return Sides(_parse(claim["left"], names), _parse(claim["right"], names), lambda text: _parse(text, names),
+                     _equal(symbols))
+    if kind == "limit":
+        return _limit_sides(claim)
+    if kind == "integral":
+        return _integral_sides(claim)
     raise ParseError(f"unknown claim kind {kind!r}")
 
 
 def check_claim(claim: dict[str, Any], where: str) -> ClaimResult:
     try:
-        stated, truth, symbols = _sides(claim)
+        sides = _sides(claim)
     except (ParseError, KeyError, TypeError) as exc:
         return ClaimResult(where, False, f"could not read claim: {exc}")
-    result = equivalent(stated, truth, symbols)
-    if result.equal is True:
-        return ClaimResult(where, True, result.method)
-    return ClaimResult(where, False, f"claim is false: {stated} vs {truth} ({result.method})")
+    if sides.same(sides.stated, sides.truth) is True:
+        return ClaimResult(where, True)
+    return ClaimResult(where, False, f"claim is false: {sides.stated} vs {sides.truth}")
 
 
 def check_checkpoint(checkpoint: dict[str, Any], where: str) -> list[ClaimResult]:
     results = [check_claim(checkpoint["expect"], f"{where} expect")]
     if not results[0].ok:
         return results
-    stated, truth, symbols = _sides(checkpoint["expect"])
+    sides = _sides(checkpoint["expect"])
     correct = [o for o in checkpoint.get("options", []) if o.get("correct")]
     if len(correct) != 1:
         return [*results, ClaimResult(where, False, "checkpoint needs exactly one correct option")]
-    names = [s.name for s in symbols]
     for option in checkpoint["options"]:
         label = f"{where} option {option.get('id')}"
         if not str(option.get("say", "")).strip():
             results.append(ClaimResult(label, False, "option needs a spoken form (say) for screen readers"))
             continue
         try:
-            value = _parse(option["value"], names)
+            value = sides.read(option["value"])
         except (ParseError, KeyError) as exc:
             results.append(ClaimResult(label, False, f"could not read option: {exc}"))
             continue
-        same = equivalent(value, truth, symbols).equal
+        same = sides.same(value, sides.truth)
         if option.get("correct") and same is not True:
             results.append(ClaimResult(label, False, "marked correct but does not equal the answer"))
         elif not option.get("correct") and same is not False:
@@ -113,3 +189,10 @@ def check_script(script: dict[str, Any]) -> list[ClaimResult]:
 def script_is_sound(script: dict[str, Any]) -> tuple[bool, list[ClaimResult]]:
     results = check_script(script)
     return all(r.ok for r in results), results
+
+
+def check_script_payload(script: dict[str, Any]) -> dict:
+    """:func:`check_script` in a form the sandbox can return: limits and integrals can take SymPy a while."""
+    results = check_script(script)
+    return {"ok": all(r.ok for r in results),
+            "checks": [{"where": r.where, "ok": r.ok, "detail": r.detail} for r in results]}

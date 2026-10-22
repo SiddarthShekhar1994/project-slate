@@ -84,6 +84,24 @@ class SheetReading(BaseModel):
     problems: list[ProblemOut]
 
 
+SYNTAX = """# Slate syntax, for every math field and answer
+Plain math as a student would type it: x^2, 3x, sqrt(x), cbrt(x), e^(2x), ln(x), sin(x)^2, arctan(x), abs(x), pi, 1/2. ln is the natural log; write a base-10 log as ln(x)/ln(10). Only numbers as constants: a problem with letters like a, k or C standing for unknown constants is kind "other". Use only these variable letters: x t y r s u v w z h. Rename any other variable (θ becomes t) and use the new letter in the statement too."""
+
+KINDS_GUIDE = """# Kinds and their fields
+derivative: f'(x), dy/dx, or the derivative's value at a point. expr is the function, var its variable, name the letter the problem uses (f, g or y), at the point (like 2) when it asks for the value there. answer: the derivative, or the number when at is given.
+implicit_derivative: dy/dx on a curve given by an equation. equation like x^2 + xy + y^2 = 7, var x, dependent y, at like "x=1, y=2" when the value at a point is asked. answer: dy/dx in x and y, or the number.
+tangent_line: the tangent line at a point. For y = f(x): expr, var and at (the x-value). For a curve: equation, var, dependent and at like "x=1, y=2". answer: y = mx + b.
+linear_approx: the linearization at a. expr, var, at. With estimate (the x to estimate at, like 4.1) the answer is the estimated number; without it the answer is L(x) = ....
+limit: expr, var, to (a number, oo or -oo) and side (both, left or right). answer: a number, oo, -oo or DNE.
+antiderivative: an indefinite integral. expr, var. answer: an antiderivative + C.
+definite_integral: expr, var, lower, upper. answer: a number.
+solve: the real solutions of an equation. Use it also for "find every c that satisfies the Mean Value Theorem" or "where is the tangent horizontal": write the equation to solve. equation, var, interval (like [0, 2pi] when the problem restricts it, else ""). answer: the solutions separated by commas, or none.
+critical_points: expr, var, interval ("" for the whole domain). answer: the x-values separated by commas, or none.
+extremum: an absolute maximum or minimum on an interval, including an optimization word problem once you have set it up as one function of one variable. expr, var, interval (like [0, 4], or (0, oo) when open), goal (max or min), report (value for the extreme value itself, location for where it happens). answer: a number, or the x-values separated by commas.
+related_rates: relation is one equation linking the changing quantities (substitute any that stay fixed), variables lists them (like "x, y"), values gives every variable's value at that instant (like "x=3, y=4", working out any the problem doesn't state), rates gives every known rate d/dt (like "x=2", negative when decreasing), find is the variable whose rate is asked. answer: that rate as a number.
+other: anything else, such as proofs, explanations, sketches, intervals of increase or concavity, reading a graph or table. Fill statement, hints, steps, answer (in words if needed) and reason, and leave the math fields empty."""
+
+
 def _builtin_list() -> str:
     return "\n".join(f"- {s.id}: {s.title}. {s.summary}" for s in all_skills())
 
@@ -113,22 +131,9 @@ For each problem:
 - steps: the worked solution in 2 to 6 steps, each a short title (words, math in $...$) and one line of LaTeX with no dollar signs.
 - reason: for kind "other", one sentence for the student on why a computer can't check it (it asks for a proof, a sketch, an explanation, intervals). Otherwise "".
 
-# Slate syntax, for every math field and answer
-Plain math as a student would type it: x^2, 3x, sqrt(x), cbrt(x), e^(2x), ln(x), sin(x)^2, arctan(x), abs(x), pi, 1/2. ln is the natural log; write a base-10 log as ln(x)/ln(10). Only numbers as constants: a problem with letters like a, k or C standing for unknown constants is kind "other". Use only these variable letters: x t y r s u v w z h. Rename any other variable (θ becomes t) and use the new letter in the statement too.
+{SYNTAX}
 
-# Kinds and their fields
-derivative: f'(x), dy/dx, or the derivative's value at a point. expr is the function, var its variable, name the letter the problem uses (f, g or y), at the point (like 2) when it asks for the value there. answer: the derivative, or the number when at is given.
-implicit_derivative: dy/dx on a curve given by an equation. equation like x^2 + xy + y^2 = 7, var x, dependent y, at like "x=1, y=2" when the value at a point is asked. answer: dy/dx in x and y, or the number.
-tangent_line: the tangent line at a point. For y = f(x): expr, var and at (the x-value). For a curve: equation, var, dependent and at like "x=1, y=2". answer: y = mx + b.
-linear_approx: the linearization at a. expr, var, at. With estimate (the x to estimate at, like 4.1) the answer is the estimated number; without it the answer is L(x) = ....
-limit: expr, var, to (a number, oo or -oo) and side (both, left or right). answer: a number, oo, -oo or DNE.
-antiderivative: an indefinite integral. expr, var. answer: an antiderivative + C.
-definite_integral: expr, var, lower, upper. answer: a number.
-solve: the real solutions of an equation. Use it also for "find every c that satisfies the Mean Value Theorem" or "where is the tangent horizontal": write the equation to solve. equation, var, interval (like [0, 2pi] when the problem restricts it, else ""). answer: the solutions separated by commas, or none.
-critical_points: expr, var, interval ("" for the whole domain). answer: the x-values separated by commas, or none.
-extremum: an absolute maximum or minimum on an interval, including an optimization word problem once you have set it up as one function of one variable. expr, var, interval (like [0, 4], or (0, oo) when open), goal (max or min), report (value for the extreme value itself, location for where it happens). answer: a number, or the x-values separated by commas.
-related_rates: relation is one equation linking the changing quantities (substitute any that stay fixed), variables lists them (like "x, y"), values gives every variable's value at that instant (like "x=3, y=4", working out any the problem doesn't state), rates gives every known rate d/dt (like "x=2", negative when decreasing), find is the variable whose rate is asked. answer: that rate as a number.
-other: anything else, such as proofs, explanations, sketches, intervals of increase or concavity, reading a graph or table. Fill statement, hints, steps, answer (in words if needed) and reason, and leave the math fields empty."""
+{KINDS_GUIDE}"""
 
 
 @dataclass(frozen=True)
@@ -155,13 +160,16 @@ def batches(blocks: list[Block], max_chars: int = MAX_BATCH_CHARS) -> list[list[
 
 
 def content(title: str, kind_label: str, blocks: list[Block], images: list[tuple[str, bytes]],
-            topics: list[str]) -> list[dict]:
+            topics: list[str], known: list[str] | None = None) -> list[dict]:
     parts: list[dict] = []
     for label, png in images:
         parts.append({"type": "text", "text": f"Page image ({label}):"})
         parts.append({"type": "image", "source": {"type": "base64", "media_type": "image/png",
                                                   "data": base64.standard_b64encode(png).decode()}})
     text = [f'Material: "{title}" ({kind_label}).']
+    if known:
+        text.append("The student already has these topics from other material; when a topic here is one of them, "
+                    "use exactly the same name: " + "; ".join(known) + ".")
     if topics:
         text.append("Topics already found in earlier parts of this material (reuse these names when they fit): "
                     + "; ".join(topics) + ".")
@@ -173,8 +181,11 @@ def content(title: str, kind_label: str, blocks: list[Block], images: list[tuple
     return parts
 
 
-def spec_of(problem: ProblemOut) -> dict:
-    """The spec ``kinds.py`` reads: the kind and the math fields that are filled in."""
+def spec_of(problem: BaseModel) -> dict:
+    """The spec ``kinds.py`` reads: the kind and the math fields that are filled in.
+
+    ``problem`` is a :class:`ProblemOut` or anything with the same math fields
+    (a lesson's worked example)."""
     spec: dict = {"kind": problem.kind}
     for name in SPEC_FIELDS:
         value = str(getattr(problem, name) or "").strip()
@@ -184,7 +195,7 @@ def spec_of(problem: ProblemOut) -> dict:
 
 
 def read_material(llm, *, title: str, kind_label: str, blocks: list[Block],
-                  images: list[tuple[str, bytes]]) -> SheetReading:
+                  images: list[tuple[str, bytes]], known: list[str] | None = None) -> SheetReading:
     """Read every chunk, a few pages per request. Images go with the first request only."""
     total = 0
     kept: list[Block] = []
@@ -201,7 +212,7 @@ def read_material(llm, *, title: str, kind_label: str, blocks: list[Block],
         reading = llm.structured(
             system=SYSTEM,
             content=content(title, kind_label, group, images if index == 0 and len(groups) == 1 else [],
-                            [t.name for t in topics]),
+                            [t.name for t in topics], known),
             schema=SheetReading, effort="medium", max_tokens=20000,
         )
         known = {t.name.strip().lower() for t in topics}

@@ -201,13 +201,50 @@ export type SourceReading = {
   not_checked: { label: string | null; kind: string; reason: string; statement: string }[];
 };
 
-export type MaterialTopic = {
+/** Where Slate is with writing a topic's lesson or problems. */
+export type BuildState = "done" | "writing" | "failed" | "none" | "needs_key";
+
+export type TopicCard = {
   id: string;
   title: string;
   summary: string;
+  builtin: boolean;
+  origin: "builtin" | "upload" | "added";
+  on_dashboard: boolean;
+  mastery: number | null;
+  status: MasteryStatus;
+  lessons: number;
   problems: number;
-  from_sheets: number;
-  sources: string[];
+  lesson: BuildState;
+  lesson_error: string | null;
+  practice: BuildState;
+  practice_error: string | null;
+  sources: { id: string; title: string }[];
+};
+
+export type TopicSuggestion = { title: string; summary: string; builtin: boolean };
+
+export type Dashboard = { topics: TopicCard[]; suggestions: TopicSuggestion[]; claude: boolean };
+
+export type TopicProblem = {
+  id: string;
+  label: string | null;
+  statement: string;
+  kind: string;
+  difficulty: number;
+  origin: "sheet" | "variant";
+  source: { id: string; title: string } | null;
+  status: "ready" | "unchecked" | "unsupported";
+  reason: string;
+  result: "solved" | "missed" | "new";
+};
+
+export type TopicView = Omit<TopicCard, "lessons"> & {
+  formula: Formula | null;
+  lessons: LessonSummary[];
+  problem_list: TopicProblem[];
+  worksheets: WorksheetSummary[];
+  mistakes: { tag: string; label: string; count: number; example: string }[];
 };
 
 export type SourceCitation = { source_id: string; title: string; kind: string; locator: string };

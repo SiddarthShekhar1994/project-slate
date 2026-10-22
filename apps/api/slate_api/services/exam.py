@@ -31,8 +31,7 @@ from ..models import Attempt, MistakeTag, Source, SourceChunk, User, Worksheet, 
 from . import review, sandbox
 from .grading import Grade, grade_answer
 from .ingest.match import match_skills
-from .practice import MAX_WORKSHEET, PracticeError, attempt_view, load_problem, store_problem
-from .problem_gen import build_worksheet
+from .practice import MAX_WORKSHEET, PracticeError, attempt_view, load_problem, plan_problems, store_problem
 from .verify import ParseError, parse_answer
 
 PACES = ("exam", "study")
@@ -139,7 +138,7 @@ def create_exam(db: Session, user: User, weights: dict[str, float], count: int, 
     counts = allocate({s: weights[s] for s in skill_ids}, count)
     skill_ids = [s for s in skill_ids if counts[s] > 0]
     seed = seed if seed is not None else secrets.randbits(31)
-    problems = build_worksheet(skill_ids, count, seed, counts=[counts[s] for s in skill_ids])
+    problems = plan_problems(db, user, {s: counts[s] for s in skill_ids}, seed)
 
     limit = time_limit_seconds([p.difficulty for p in problems], pace)
     total = sum(weights[s] for s in skill_ids)
@@ -198,9 +197,11 @@ def save_answer(db: Session, user: User, item_id: uuid.UUID, raw: str) -> Worksh
     raw = raw.strip()
     if raw:
         try:
-            parse_answer(raw, [_symbol(v) for v in item.current_problem.variables])
+            _read(item.current_problem, raw)
         except ParseError as exc:
             raise PracticeError(str(exc), 422) from None
+        except (TypeError, ValueError, NotImplementedError):
+            raise PracticeError("I couldn't read that answer. Check it for typos.", 422) from None
     item.exam_answer = raw[:500] or None
     sheet.updated_at = _now()
     db.flush()
@@ -211,6 +212,17 @@ def _symbol(name: str):
     import sympy as sp
 
     return sp.Symbol(name)
+
+
+def _read(problem_row, raw: str) -> None:
+    """Raise ``ParseError`` if ``raw`` can't be read as an answer to this problem."""
+    from .materials import service as materials
+    from .materials.answers import read_answer
+
+    if materials.is_material(problem_row):
+        read_answer(load_problem(problem_row).built, raw)  # a limit, a list of values, a line...
+    else:
+        parse_answer(raw, [_symbol(v) for v in problem_row.variables])
 
 
 def finish_exam(db: Session, sheet: Worksheet) -> Worksheet:
@@ -272,7 +284,8 @@ def exam_item_view(db: Session, item: WorksheetItem, finished: bool) -> dict:
             "prompt": problem.prompt,
             "variables": problem.variables,
             "answer_kind": problem.answer_kind,
-            "is_word": skill.family(problem.family).word,
+            "is_word": (bool(problem.params.get("word")) if problem.family.startswith("material:")
+                        else skill.family(problem.family).word),
         },
         "answer": item.exam_answer,
         "result": None,

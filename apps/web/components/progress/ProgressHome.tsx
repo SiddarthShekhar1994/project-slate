@@ -9,6 +9,7 @@ import { Card } from "@/components/shared/ui/Card";
 import { Spinner } from "@/components/shared/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 import { dueLabel, percent } from "@/lib/format";
+import { topicHref } from "@/lib/topics";
 import type { ProgressView, RankedMistake, ReviewEntry, SkillProgress } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 
@@ -91,7 +92,7 @@ export function ProgressHome() {
 function Summary({ data }: { data: ProgressView }) {
   const { answers, problems_cleared, first_try_rate } = data.summary;
   if (answers === 0) {
-    return <p className="mt-2 text-text-2">Answer a few problems and your skill map fills in here.</p>;
+    return <p className="mt-2 text-text-2">Answer a few problems and your topics fill in here.</p>;
   }
   return (
     <p className="mt-2 text-text-2">
@@ -114,8 +115,17 @@ function SkillMap({
   return (
     <Card aria-labelledby="skills-heading" className="p-4 sm:p-6">
       <h2 id="skills-heading" className="text-lg font-bold">
-        Skill map
+        Your topics
       </h2>
+      {data.courses.length === 0 && (
+        <p className="mt-2 text-sm text-text-2">
+          Add a topic or upload a study guide on the{" "}
+          <Link href="/dashboard" className="text-accent-light underline-offset-4 hover:underline">
+            dashboard
+          </Link>
+          , and your mastery of each one shows up here.
+        </p>
+      )}
       {data.courses.map((course) => (
         <div key={course.id} className="mt-4">
           {data.courses.length > 1 && <p className="text-sm font-semibold text-muted">{course.title}</p>}
@@ -184,11 +194,9 @@ function SkillRow({
         {details.length > 0 && <p className="mt-1.5 text-xs text-muted">{details.join(" · ")}</p>}
       </div>
       <div className="flex gap-2">
-        {skill.lessons !== false && (
-          <Link href={`/lesson?skill=${encodeURIComponent(skill.id)}`} className={buttonClasses("ghost")}>
-            Lesson<span className="sr-only">: {skill.title}</span>
-          </Link>
-        )}
+        <Link href={topicHref(skill.id, "lesson")} className={buttonClasses("ghost")}>
+          Lesson<span className="sr-only">: {skill.title}</span>
+        </Link>
         <Button variant="secondary" onClick={onPractice} disabled={disabled} aria-busy={busy}>
           {busy ? "Building…" : "Practice"}
           <span className="sr-only">: {skill.title}</span>

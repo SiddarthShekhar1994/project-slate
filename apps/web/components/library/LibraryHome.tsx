@@ -1,59 +1,47 @@
 "use client";
 
-import { Spinner } from "@/components/shared/ui/Spinner";
-import { api } from "@/lib/api";
-import { useSession } from "@/lib/session";
 import { useEffect } from "react";
+import { api } from "@/lib/api";
+import { useTopics } from "@/lib/topics";
 import { useApi } from "@/lib/useApi";
-import { ResumeCard } from "./ResumeCard";
 import { SourceList } from "./SourceList";
 import { UploadZone } from "./UploadZone";
 
-/** Library home: pick up where you left off, add course materials, and see what each was used for. */
+/** Sources: what the student uploaded, the topics Slate found in each, and what each was used for. */
 export function LibraryHome() {
-  const { user } = useSession();
-  const recent = useApi(() => api.worksheets());
-  const lessons = useApi(() => api.lessons());
+  const { refresh } = useTopics();
   const library = useApi(() => api.sources());
   const sources = library.data?.sources ?? [];
-  const processing = sources.some((s) => s.status === "processing" || s.reading?.status === "pending");
+  const processing = sources.filter((s) => s.status === "processing" || s.reading?.status === "pending").length;
 
-  // While anything is still being read, refresh the list every two seconds.
+  // While anything is still being read, refresh the list every two seconds;
+  // when a reading finishes, its topics join the sidebar.
   const setLibrary = library.setData;
   useEffect(() => {
     if (!processing) return;
     const timer = window.setInterval(() => {
-      api.sources().then(setLibrary).catch(() => undefined);
+      api
+        .sources()
+        .then((next) => {
+          setLibrary(next);
+          const still = next.sources.filter((s) => s.status === "processing" || s.reading?.status === "pending");
+          if (still.length < processing) void refresh();
+        })
+        .catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [processing, setLibrary]);
+  }, [processing, setLibrary, refresh]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">
       <header>
-        <p className="text-sm font-semibold text-accent-tint-text">Library</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-          {user ? `Welcome back, ${user.display_name}` : "Library"}
-        </h1>
+        <p className="text-sm font-semibold text-accent-tint-text">Sources</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Your course materials</h1>
+        <p className="mt-2 max-w-2xl text-text-2">
+          Lessons and problems cite these. Slate reads each one for the topics and problems in it, and every topic it
+          finds gets a tab of its own.
+        </p>
       </header>
-
-      <section aria-labelledby="pickup-heading">
-        <h2 id="pickup-heading" className="sr-only">
-          Pick up where you left off
-        </h2>
-        {!recent.data || !lessons.data ? (
-          <Spinner />
-        ) : (
-          <ResumeCard
-            worksheet={recent.data.worksheets.find((w) => !w.completed_at) ?? null}
-            lesson={
-              lessons.data.lessons
-                .filter((l) => l.last_opened && l.resume_step < l.steps - 1)
-                .sort((a, b) => Date.parse(b.last_opened ?? "") - Date.parse(a.last_opened ?? ""))[0] ?? null
-            }
-          />
-        )}
-      </section>
 
       {library.data && (
         <>

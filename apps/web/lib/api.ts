@@ -8,13 +8,15 @@ import type {
   LessonView,
   SourceView,
   StepAudio,
+  TopicCard,
+  TopicView,
   Catalog,
+  Dashboard,
   ExamCreated,
   ExamPace,
   ExamView,
   ExamWeight,
   FormulaSheet,
-  MaterialTopic,
   PhotoReading,
   Preview,
   ProgressView,
@@ -146,7 +148,15 @@ export const api = {
   reprocessSource: (id: string) => post<SourceView>(`/sources/${id}/reprocess`),
   readSource: (id: string) => post<SourceView>(`/sources/${id}/read`),
   practiceSheet: (id: string) => post<Worksheet>(`/sources/${id}/practice`),
-  materialTopics: () => request<{ topics: MaterialTopic[] }>("/materials/topics"),
+
+  topics: () => request<Dashboard>("/topics"),
+  topic: (id: string) => request<TopicView>(`/topics/${encodeURIComponent(id)}`),
+  addTopic: (name: string) => post<TopicCard>("/topics", { name }),
+  removeTopic: (id: string) => request<void>(`/topics/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  writeLesson: (id: string) => post<TopicCard>(`/topics/${encodeURIComponent(id)}/lesson`),
+  writeProblems: (id: string) => post<TopicCard>(`/topics/${encodeURIComponent(id)}/problems`),
+  practiceTopic: (id: string, options: { count?: number; problem_ids?: string[] } = {}) =>
+    post<WorksheetSummary>(`/topics/${encodeURIComponent(id)}/practice`, options),
   uploadSource,
 };
 

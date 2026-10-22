@@ -25,6 +25,7 @@ from .routers import (
     practice,
     progress,
     sources,
+    topics,
     voice,
 )
 from .services import app_settings as app_settings_service
@@ -64,7 +65,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="Slate API", version="0.1.0", lifespan=lifespan)
     for module in (app_settings, auth, catalog, exam, lessons, materials, math, media, practice, progress, sources,
-                   voice):
+                   topics, voice):
         app.include_router(module.router, prefix="/api")
 
     @app.get("/api/health")

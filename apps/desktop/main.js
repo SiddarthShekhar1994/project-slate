@@ -285,7 +285,7 @@ async function start() {
   state.web = await startWeb(webPort, apiPort);
   state.origin = `http://127.0.0.1:${webPort}`;
   await waitFor(`${state.origin}/api/health`, WEB_START_MS, () => state.web.alive, "The Slate interface");
-  if (state.window) await state.window.loadURL(`${state.origin}/library`);
+  if (state.window) await state.window.loadURL(`${state.origin}/dashboard`);
 }
 
 function stopChildren() {

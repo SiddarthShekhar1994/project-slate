@@ -6,8 +6,13 @@ import pymupdf
 import pytest
 from slate_api.routers import sources as sources_router
 from slate_api.services.materials import service as materials_service
+import re
+
+from slate_api.services import lessons as lessons_service
+from slate_api.services import topics as topics_service
+from slate_api.services.lesson_gen.schema import Lesson
 from slate_api.services.materials.read import SPEC_FIELDS, ProblemOut, SheetReading, StepOut, TopicOut
-from slate_api.services.materials.variants import VariantSet
+from slate_api.services.materials.variants import TopicPlan, VariantSet
 
 CHAIN = "calc1.derivatives.chain_rule"
 IMPLICIT = "calc1.derivatives.implicit_differentiation"
@@ -66,6 +71,58 @@ VARIANTS = {
 }
 
 
+CLAIM = {"kind": "equal", "of": "", "var": "x", "equals": "", "left": "", "right": "", "vars": [], "to": "",
+         "side": "", "lower": "", "upper": ""}
+NO_CHECKPOINT = {"prompt": "", "expect": CLAIM, "options": []}
+# The worked example each fake lesson solves, and a fact it states, by topic.
+LESSON_MATH = {
+    "Limits": ({"kind": "limit", "statement": r"Find $\lim_{x \to 0} \frac{\sin 3x}{x}$.", "expr": "sin(3x)/x",
+                "var": "x", "to": "0", "side": "both", "answer": "3"},
+               {**CLAIM, "kind": "limit", "of": "sin(3x)/x", "to": "0", "side": "both", "equals": "3"}),
+    "Related rates": ({"kind": "related_rates", "statement": LADDER, "word": True, "relation": "x^2 + y^2 = 25",
+                       "variables": "x, y", "values": "x=3, y=4", "rates": "x=2", "find": "y", "answer": "-3/2"},
+                      {**CLAIM, "left": "-(2*3*2)/(2*4)", "right": "-3/2"}),
+    "L'Hôpital's rule": ({"kind": "limit", "statement": r"Find $\lim_{x \to 0} \frac{e^x - 1}{x}$.",
+                          "expr": "(e^x - 1)/x", "var": "x", "to": "0", "side": "both", "answer": "1"},
+                         {**CLAIM, "kind": "limit", "of": "(e^x - 1)/x", "to": "0", "side": "both", "equals": "1"}),
+}
+
+
+def fake_lesson(topic: str) -> Lesson:
+    example, claim = LESSON_MATH.get(topic, ({"kind": "other"}, {**CLAIM, "left": "2+2", "right": "4"}))
+    blank = {"statement": "", "word": False, "answer": "", **{name: "" for name in SPEC_FIELDS}}
+    action = {"type": "write", "at_phrase": "", "id": "", "latex": "", "row": 0, "col": 0, "size": "md",
+              "target": "", "part": "", "color": "chalk", "text": "", "side": "below"}
+    return Lesson.model_validate({
+        "title": topic, "summary": f"{topic}, one step at a time.", "example": {**blank, **example},
+        "steps": [
+            {"id": "idea", "title": "The idea", "narration": [{"text": "Here is the big idea.", "math": "", "say": ""}],
+             "actions": [{**action, "at_phrase": "big idea", "id": "a", "latex": "x"}], "has_checkpoint": False,
+             "checkpoint": NO_CHECKPOINT, "claims": [], "sources": []},
+            {"id": "work", "title": "Work it out", "narration": [{"text": "Now work the example.", "math": "", "say": ""}],
+             "actions": [], "has_checkpoint": False, "checkpoint": NO_CHECKPOINT, "claims": [claim], "sources": []},
+        ],
+    })
+
+
+PLANS = {
+    "lhopital": TopicPlan(is_math=True, title="L'Hôpital's rule",
+                          summary="Limits of the form 0/0 or ∞/∞, by differentiating the top and the bottom.",
+                          problems=[
+        problem(kind="limit", difficulty=1, statement=r"Find $\lim_{x \to 0} \frac{e^x - 1}{x}$.",
+                expr="(e^x - 1)/x", var="x", to="0", side="both", answer="1"),
+        problem(kind="limit", difficulty=2, statement=r"Find $\lim_{x \to 0} \frac{1 - \cos x}{x^2}$.",
+                expr="(1 - cos(x))/x^2", var="x", to="0", side="both", answer="1/2"),
+        problem(kind="limit", difficulty=3, statement=r"Find $\lim_{x \to \infty} \frac{x^2}{e^x}$.",
+                expr="x^2/e^x", var="x", to="oo", side="both", answer="0"),
+        # Claude slips here (the limit is 1), so SymPy drops it.
+        problem(kind="limit", difficulty=2, statement=r"Find $\lim_{x \to 1} \frac{\ln x}{x - 1}$.",
+                expr="ln(x)/(x - 1)", var="x", to="1", side="both", answer="2"),
+    ]),
+    "pizza": TopicPlan(is_math=False, title="Pizza", summary="", problems=[]),
+}
+
+
 class FakeClaude:
     model = "fake-claude"
 
@@ -82,12 +139,16 @@ class FakeClaude:
                 if f"Topic: {topic}." in content:
                     return VariantSet(problems=problems)
             return VariantSet(problems=[])
+        if schema is TopicPlan:
+            return PLANS[content.split("typed: ", 1)[1].split("\n", 1)[0].strip().lower()]
+        if schema is Lesson:
+            return fake_lesson(re.match(r"Topic: (.+?)\.", content).group(1))
         raise AssertionError(f"unexpected request for {schema.__name__}")
 
 
 def use(monkeypatch, fake: FakeClaude) -> FakeClaude:
-    monkeypatch.setattr(materials_service, "get_llm", lambda: fake)
-    monkeypatch.setattr(sources_router, "get_llm", lambda: fake)
+    for module in (materials_service, sources_router, topics_service, lessons_service):
+        monkeypatch.setattr(module, "get_llm", lambda: fake)
     return fake
 
 
@@ -139,7 +200,9 @@ def test_a_review_sheet_becomes_checked_practice(signed_in, claude):
     # for the topics Slate has no templates for.
     first_schema, first_content = claude.calls[0]
     assert first_schema == "SheetReading" and any(block["type"] == "image" for block in first_content)
-    assert {name for name, _ in claude.calls[1:]} == {"VariantSet"}
+    # Then lessons, for each topic the sheet covers that doesn't have one yet.
+    names = [name for name, _ in claude.calls[1:]]
+    assert set(names) == {"VariantSet", "Lesson"} and names.index("Lesson") > names.index("VariantSet")
 
     sheet = signed_in.post(f"/api/sources/{sid}/practice")
     assert sheet.status_code == 201, sheet.text
@@ -173,8 +236,10 @@ def test_a_review_sheet_becomes_checked_practice(signed_in, claude):
     assert [i["problem"]["answer_kind"] for i in r.json()["items"]] == ["limit", "limit"]
     assert r.json()["skills"][0]["title"] == "Limits"
     progress = signed_in.get("/api/progress").json()
-    mine = next(c for c in progress["courses"] if c["title"] == "From your materials")
-    rates = next(s for s in mine["units"][0]["skills"] if s["title"] == "Related rates")
+    # Progress groups the student's topics by the material they came from.
+    [mine] = progress["courses"]
+    sheet = next(u for u in mine["units"] if u["title"] == source["title"])
+    rates = next(s for s in sheet["skills"] if s["title"] == "Related rates")
     assert rates["attempts"] == 2
     queue = progress["review"]["due"] + progress["review"]["upcoming"]
     assert any(card["skill"]["title"] == "Related rates" for card in queue)

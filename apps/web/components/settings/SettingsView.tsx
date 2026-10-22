@@ -160,7 +160,7 @@ function SettingsForm({ settings, onSaved }: { settings: AppSettings; onSaved: (
       </div>
 
       <p className="text-xs text-muted">
-        Your library, progress and these settings are saved in <span className="font-mono">{settings.data_dir}</span>.
+        Your topics, uploads, progress and these settings are saved in <span className="font-mono">{settings.data_dir}</span>.
       </p>
     </form>
   );

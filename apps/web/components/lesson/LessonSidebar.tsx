@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { topicHref } from "@/lib/topics";
 import type { LessonView, MasteryStatus } from "@/lib/types";
 
 const STATUS: Record<MasteryStatus, { label: string; dot: string }> = {
@@ -8,7 +9,7 @@ const STATUS: Record<MasteryStatus, { label: string; dot: string }> = {
   mastered: { label: "Mastered", dot: "bg-success" },
 };
 
-/** Unit outline with mastery per skill, and the sources this lesson was built from. */
+/** The student's topics with mastery, and the sources this lesson was built from. */
 export function LessonSidebar({ lesson }: { lesson: LessonView }) {
   return (
     <aside className="flex flex-col gap-6" aria-label="Lesson context">
@@ -23,7 +24,7 @@ export function LessonSidebar({ lesson }: { lesson: LessonView }) {
             return (
               <li key={skill.id}>
                 <Link
-                  href={`/lesson?skill=${encodeURIComponent(skill.id)}`}
+                  href={topicHref(skill.id, "lesson")}
                   aria-current={current ? "page" : undefined}
                   className={`flex min-h-11 items-center gap-3 rounded-[10px] px-3 py-2 text-sm ${
                     current ? "bg-accent-tint text-accent-tint-text" : "text-text-2 hover:bg-hover hover:text-text"
@@ -55,9 +56,9 @@ export function LessonSidebar({ lesson }: { lesson: LessonView }) {
         </h2>
         {lesson.sources.length === 0 ? (
           <p className="mt-2 text-sm text-text-2">
-            Slate&apos;s built-in lesson. Upload your course materials in the{" "}
+            Slate&apos;s own lesson. Upload notes or a study guide on this topic in{" "}
             <Link href="/library" className="text-accent-light underline-offset-4 hover:underline">
-              library
+              Sources
             </Link>{" "}
             to get one in your professor&apos;s notation.
           </p>

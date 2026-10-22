@@ -144,6 +144,11 @@ def _limit(text: str) -> tuple[Any, str, int]:
     return _number(text)
 
 
+def limit_value(text: str) -> sp.Basic:
+    """A limit's value as written: a number, ``oo``, ``-oo`` or :data:`DNE`."""
+    return _limit(text)[0]
+
+
 def read_answer(built, raw: str) -> Reading:
     """Read ``raw`` for ``built``. Raises ``ParseError`` with a message for the student."""
     if raw is None or not raw.strip():

@@ -13,7 +13,17 @@ type Upload = { name: string; progress: number; error: string | null };
  * Drop files here or choose them with the button. The drop area is only a
  * convenience for mice; the button and its file picker work by keyboard.
  */
-export function UploadZone({ kinds, onUploaded }: { kinds: Record<string, string>; onUploaded: (s: SourceView) => void }) {
+export function UploadZone({
+  kinds,
+  onUploaded,
+  title = "Add course materials",
+  blurb = "Drop lecture slides, textbook chapters, your syllabus, past exams or photos of notes here.",
+}: {
+  kinds: Record<string, string>;
+  onUploaded: (s: SourceView) => void;
+  title?: string;
+  blurb?: string;
+}) {
   const [kind, setKind] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -44,7 +54,7 @@ export function UploadZone({ kinds, onUploaded }: { kinds: Record<string, string
   return (
     <section aria-labelledby={`${id}-title`} className="flex flex-col gap-3">
       <h2 id={`${id}-title`} className="text-lg font-bold">
-        Add course materials
+        {title}
       </h2>
       <div
         onDragOver={(e) => {
@@ -58,9 +68,7 @@ export function UploadZone({ kinds, onUploaded }: { kinds: Record<string, string
         }`}
       >
         <Icon name="upload" size={28} className="text-accent-light" />
-        <p className="text-text">
-          Drop lecture slides, textbook chapters, your syllabus, past exams or photos of notes here.
-        </p>
+        <p className="text-text">{blurb}</p>
         <p className="text-sm text-muted">PDF, PowerPoint (.pptx), Word (.docx), PNG or JPEG, up to 50 MB each.</p>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <label className="flex items-center gap-2 text-sm text-text-2">

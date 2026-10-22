@@ -97,9 +97,11 @@ def test_generated_lesson_is_cited_and_verified(signed_in):
     assert [l["id"] for l in used["lessons"]] == [summary["id"]]
 
 
-def test_generation_needs_a_matching_source(signed_in):
+def test_a_built_in_skill_gets_a_lesson_without_sources(signed_in):
+    # No Claude key and no uploads: the composer writes it from a verified template problem.
     r = signed_in.post("/api/lessons/generate", json={"skill_id": CHAIN})
-    assert r.status_code == 422 and "sources" in r.json()["detail"]
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "generated" and r.json()["sources"] == 0
 
 
 @pytest.mark.parametrize("name, mime, expected", [

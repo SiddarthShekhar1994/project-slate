@@ -30,7 +30,18 @@ from slate_skills.core.types import DIFFICULTY_LABELS
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Attempt, Citation, MistakeTag, Problem, Source, SourceChunk, User, Worksheet, WorksheetItem
+from ..models import (
+    Attempt,
+    Citation,
+    MaterialProblem,
+    MistakeTag,
+    Problem,
+    Source,
+    SourceChunk,
+    User,
+    Worksheet,
+    WorksheetItem,
+)
 from . import review, sandbox
 from .grading import Grade, grade_answer
 from .materials import service as materials
@@ -136,6 +147,9 @@ def create_worksheet(db: Session, user: User, skill_ids: list[str], count: int, 
     count = max(1, min(count, MAX_WORKSHEET))
     seed = seed if seed is not None else secrets.randbits(31)
     problems = _plan(db, user, skill_ids, count, seed)
+    for skill_id in skill_ids:
+        if is_builtin(skill_id):
+            materials.pin_skill(db, user.id, skill_id)  # a built-in topic practiced is one of the student's topics
 
     sheet = Worksheet(user_id=user.id, title=title or _title(skill_ids), skill_ids=skill_ids, mode=mode, seed=seed)
     db.add(sheet)
@@ -152,22 +166,25 @@ def create_worksheet(db: Session, user: User, skill_ids: list[str], count: int, 
 
 
 def _plan(db: Session, user: User, skill_ids: list[str], count: int, seed: int) -> list[VerifiedProblem]:
-    """Problems for a worksheet: templates for built-in skills, course materials for the student's topics."""
+    shares = [count // len(skill_ids) + (1 if i < count % len(skill_ids) else 0) for i in range(len(skill_ids))]
+    return plan_problems(db, user, dict(zip(skill_ids, shares)), seed)
+
+
+def plan_problems(db: Session, user: User, counts: dict[str, int], seed: int) -> list[VerifiedProblem]:
+    """``counts[skill]`` problems per skill: templates for built-in skills, course materials for the
+    student's own topics. Easy to hard."""
+    skill_ids = [s for s, n in counts.items() if n > 0]
     builtin = [s for s in skill_ids if is_builtin(s)]
     topics = [s for s in skill_ids if not is_builtin(s)]
     for topic in topics:
         if not materials.owns_topic(db, user.id, topic):
             raise PracticeError(f"Unknown skill {topic}.", 422)
-    shares = [count // len(skill_ids) + (1 if i < count % len(skill_ids) else 0) for i in range(len(skill_ids))]
-    share = dict(zip(skill_ids, shares))
     problems: list[VerifiedProblem] = []
     if builtin:
-        problems += build_worksheet(builtin, sum(share[s] for s in builtin), seed)
+        problems += build_worksheet(builtin, sum(counts[s] for s in builtin), seed, counts=[counts[s] for s in builtin])
     seen = {p.signature for p in problems}
     for topic in topics:
-        if share[topic] == 0:
-            continue
-        found = materials.topic_problems(db, user, topic, share[topic], exclude=seen)
+        found = materials.topic_problems(db, user, topic, counts[topic], exclude=seen)
         if not found:
             raise PracticeError(f"There are no checked problems for {get_skill(topic).title.lower()} yet.", 409)
         seen |= {p.signature for p in found}
@@ -175,17 +192,14 @@ def _plan(db: Session, user: User, skill_ids: list[str], count: int, seed: int) 
     return sorted(problems, key=lambda p: p.difficulty) if topics else problems
 
 
-def create_sheet_worksheet(db: Session, user: User, source_id: uuid.UUID) -> Worksheet:
-    """The problems on an uploaded sheet that Slate could check, in the sheet's order."""
-    from .sources import get_source
-
-    source: Source = get_source(db, user, source_id)
-    rows = [r for r in materials.sheet_rows(db, source) if r.status == "ready"][:MAX_SHEET]
+def create_problem_worksheet(db: Session, user: User, rows: list[MaterialProblem], title: str,
+                             settings: dict | None = None) -> Worksheet:
+    """A worksheet of these particular problems from the student's materials, in this order."""
     if not rows:
-        raise PracticeError("Slate didn't find problems on this sheet that it can check.", 409)
+        raise PracticeError("There are no problems here that Slate can check.", 409)
     skill_ids = list(dict.fromkeys(r.skill_id for r in rows if r.skill_id))
-    sheet = Worksheet(user_id=user.id, title=f"{source.title}"[:150], skill_ids=skill_ids, mode="practice",
-                      seed=0, settings={"source_id": str(source.id)})
+    sheet = Worksheet(user_id=user.id, title=title[:150], skill_ids=skill_ids, mode="practice", seed=0,
+                      settings=settings or {})
     db.add(sheet)
     db.flush()
     for position, material in enumerate(rows):
@@ -198,6 +212,17 @@ def create_sheet_worksheet(db: Session, user: User, source_id: uuid.UUID) -> Wor
     db.flush()
     db.refresh(sheet)
     return sheet
+
+
+def create_sheet_worksheet(db: Session, user: User, source_id: uuid.UUID) -> Worksheet:
+    """The problems on an uploaded sheet that Slate could check, in the sheet's order."""
+    from .sources import get_source
+
+    source: Source = get_source(db, user, source_id)
+    rows = [r for r in materials.sheet_rows(db, source) if r.status == "ready"][:MAX_SHEET]
+    if not rows:
+        raise PracticeError("Slate didn't find problems on this sheet that it can check.", 409)
+    return create_problem_worksheet(db, user, rows, source.title, {"source_id": str(source.id)})
 
 
 def get_worksheet(db: Session, user: User, worksheet_id: uuid.UUID) -> Worksheet:

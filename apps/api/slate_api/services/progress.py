@@ -1,5 +1,6 @@
-"""What the Progress page shows: the skill map, ranked mistakes, the review
-queue and the formula sheet.
+"""What the Progress page shows: the student's topics with mastery (grouped by
+the material they came from), ranked mistakes, the review queue and the
+formula sheet.
 
 Mistakes are ranked by a recency-weighted count: each tagged answer counts
 half as much for every two weeks of age, so a habit the student has already
@@ -11,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from slate_skills import courses, get_skill
+from slate_skills import courses, get_skill, is_builtin
 from slate_skills.core.mistakes import CATEGORIES, mistake_type
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -31,9 +32,18 @@ def _now() -> datetime:
 
 
 def skill_map(db: Session, user_id: uuid.UUID) -> list[dict]:
-    """Courses, units and skills with mastery, first-try rate and review dates."""
-    all_ids = [s.id for c in courses() for s in c.skills]
-    mastery = skill_mastery(db, user_id, all_ids)
+    """The student's topics with mastery, first-try rate and review dates, grouped by the
+    material each came from (then the ones they added by name, then built-in ones)."""
+    from .topics import _sources_by_topic, topic_ids
+
+    ids = topic_ids(db, user_id)
+    hidden = set(db.scalars(select(Topic.id).where(Topic.user_id == user_id, Topic.hidden.is_(True))))
+    # Built-in skills practiced in an exam or before they were pinned still count.
+    ids += [s for s in db.scalars(select(Attempt.skill_id).where(Attempt.user_id == user_id).distinct())
+            if s not in ids and s not in hidden]
+    if not ids:
+        return []
+    mastery = skill_mastery(db, user_id, ids)
     counts = dict(db.execute(
         select(Attempt.skill_id, func.count()).where(Attempt.user_id == user_id).group_by(Attempt.skill_id)
     ).all())
@@ -50,14 +60,15 @@ def skill_map(db: Session, user_id: uuid.UUID) -> list[dict]:
         .group_by(Attempt.skill_id)
     ).all())
     cards = {c.skill_id: c for c in review.cards(db, user_id)}
-    topics = list(db.scalars(select(Topic).where(Topic.user_id == user_id).order_by(Topic.created_at)))
-    mastery.update(skill_mastery(db, user_id, [t.id for t in topics]) if topics else {})
+    sources = _sources_by_topic(db, user_id, ids)
+    origins = dict(db.execute(select(Topic.id, Topic.origin).where(Topic.id.in_(ids))).all())
 
-    def row(skill_id: str, title: str, summary: str, prerequisites: tuple[str, ...] = (), lessons: bool = True) -> dict:
+    def row(skill_id: str) -> dict:
+        skill = get_skill(skill_id)
         return {
             "id": skill_id,
-            "title": title,
-            "summary": summary,
+            "title": skill.title,
+            "summary": skill.summary,
             "mastery": mastery[skill_id].mastery,
             "status": mastery[skill_id].status,
             "attempts": counts.get(skill_id, 0),
@@ -65,30 +76,21 @@ def skill_map(db: Session, user_id: uuid.UUID) -> list[dict]:
                                if firsts.get(skill_id) else None),
             "last_practiced_at": last[skill_id].isoformat() if skill_id in last else None,
             "due_at": cards[skill_id].due_at.isoformat() if skill_id in cards else None,
-            "prerequisites": list(prerequisites),
-            "lessons": lessons,
+            "prerequisites": list(skill.prerequisites),
+            "lessons": True,
         }
 
-    out = []
-    for course in courses():
-        out.append({
-            "id": course.id,
-            "title": course.title,
-            "units": [{
-                "id": unit.id,
-                "title": unit.title,
-                "skills": [row(skill.id, skill.title, skill.summary, skill.prerequisites) for skill in unit.skills],
-            } for unit in course.units],
-        })
-    if topics:
-        # Topics Slate found in the student's own uploads, beyond the built-in course.
-        out.append({
-            "id": "materials",
-            "title": "From your materials",
-            "units": [{"id": "materials", "title": "Topics from your uploads",
-                       "skills": [row(t.id, t.title, t.summary, lessons=False) for t in topics]}],
-        })
-    return out
+    units: dict[str, dict] = {}
+    for skill_id in ids:
+        if sources.get(skill_id):
+            key, title = sources[skill_id][0]["id"], sources[skill_id][0]["title"]
+        elif is_builtin(skill_id):
+            key, title = "builtin", "Built into Slate"
+        else:
+            key, title = "added", "Added by you" if origins.get(skill_id) == "added" else "From your materials"
+        units.setdefault(key, {"id": key, "title": title, "skills": []})["skills"].append(row(skill_id))
+    order = sorted(units.values(), key=lambda u: (u["id"] in ("added", "builtin"), u["id"] == "builtin"))
+    return [{"id": "topics", "title": "Your topics", "units": order}]
 
 
 def ranked_mistakes(db: Session, user_id: uuid.UUID, now: datetime | None = None) -> list[dict]:

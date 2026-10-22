@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -58,6 +59,15 @@ class CheckpointIn(BaseModel):
 
 class GenerateLessonIn(BaseModel):
     skill_id: str = Field(min_length=1, max_length=120)
+
+
+class TopicIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class TopicPracticeIn(BaseModel):
+    count: int | None = Field(default=None, ge=1, le=12)
+    problem_ids: list[uuid.UUID] | None = Field(default=None, min_length=1, max_length=30)
 
 
 class ExamIn(BaseModel):

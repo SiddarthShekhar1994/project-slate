@@ -9,21 +9,23 @@ import { Spinner } from "@/components/shared/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 import { allocate, planDifficulties, timeLimitSeconds } from "@/lib/exam";
 import { minutesText } from "@/lib/format";
-import type { ExamPace, ExamWeight, SkillSummary } from "@/lib/types";
-import { useApi } from "@/lib/useApi";
+import { useTopics } from "@/lib/topics";
+import type { ExamPace, ExamWeight, TopicCard } from "@/lib/types";
 import { replaceQuery } from "@/lib/urlState";
 
 const COUNTS = [4, 6, 8, 10, 12];
+// Problems on a topic run easy, medium, hard.
+const LEVELS = [1, 2, 3];
+
+/** A topic can be on the exam once Slate has problems for it. */
+const examinable = (topic: TopicCard) => topic.builtin || topic.problems > 0;
 
 /** Pick topics, weight them like the syllabus, choose a pace, start a timed set. URL: ?skills=&pace=&count= */
 export function ExamBuilder() {
   const router = useRouter();
   const search = useSearchParams();
-  const catalog = useApi(() => api.catalog());
-  const skills = useMemo(
-    () => catalog.data?.courses.flatMap((c) => c.units.flatMap((u) => u.skills)) ?? [],
-    [catalog.data],
-  );
+  const { dashboard, error: loadError } = useTopics();
+  const skills = useMemo(() => (dashboard?.topics ?? []).filter(examinable), [dashboard]);
 
   const [chosen, setChosen] = useState<string[] | null>(() => {
     const raw = search?.get("skills");
@@ -63,18 +65,15 @@ export function ExamBuilder() {
   }, [selectedKey]);
 
   useEffect(() => {
-    if (!catalog.data) return;
+    if (!dashboard) return;
     replaceQuery({ skills: chosen ? chosen.join(",") : null, pace, count: String(count) });
-  }, [catalog.data, chosen, pace, count]);
+  }, [dashboard, chosen, pace, count]);
 
   const weights: Record<string, number> = Object.fromEntries(
     selected.map((id) => [id, edited[id] ?? defaults?.weights.find((w) => w.skill_id === id)?.weight ?? 1]),
   );
   const counts = allocate(weights, count);
-  const difficulties = selected.flatMap((id) => {
-    const skill = skills.find((s) => s.id === id);
-    return skill ? planDifficulties(skill.difficulties, counts[id] ?? 0) : [];
-  });
+  const difficulties = selected.flatMap((id) => planDifficulties(LEVELS, counts[id] ?? 0));
   const fromSyllabus = defaults?.weights.filter((w) => w.source) ?? [];
 
   function toggle(id: string, on: boolean) {
@@ -93,9 +92,10 @@ export function ExamBuilder() {
     }
   }
 
-  if (!catalog.data) {
-    return catalog.error ? <p role="alert">{catalog.error}</p> : <Spinner label="Loading topics" />;
+  if (!dashboard) {
+    return loadError ? <p role="alert">{loadError}</p> : <Spinner label="Loading topics" />;
   }
+  const waiting = dashboard.topics.filter((t) => !examinable(t));
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -124,26 +124,35 @@ export function ExamBuilder() {
               ? "Weights start from your syllabus. Change any of them; they're scaled to fit."
               : "Weights start equal. Upload your syllabus and Slate uses its percentages. They're scaled to fit."}
           </p>
-          {catalog.data.courses.map((course) =>
-            course.units.map((unit) => (
-              <div key={unit.id} className="mt-4">
-                <p className="text-sm font-semibold tracking-wide text-muted uppercase">{unit.title}</p>
-                <ul className="mt-2 flex flex-col gap-2">
-                  {unit.skills.map((skill) => (
-                    <TopicRow
-                      key={skill.id}
-                      skill={skill}
-                      checked={selected.includes(skill.id)}
-                      weight={weights[skill.id]}
-                      problems={counts[skill.id] ?? 0}
-                      source={defaults?.weights.find((w) => w.skill_id === skill.id)?.source ?? null}
-                      onToggle={(on) => toggle(skill.id, on)}
-                      onWeight={(value) => setEdited({ ...edited, [skill.id]: value })}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )),
+          {skills.length === 0 ? (
+            <p className="mt-4 text-sm text-text-2">
+              Add a topic or upload a study guide on the{" "}
+              <Link href="/dashboard" className="text-accent-light underline-offset-4 hover:underline">
+                dashboard
+              </Link>{" "}
+              first. Its topics can then go on a practice exam.
+            </p>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-2">
+              {skills.map((skill) => (
+                <TopicRow
+                  key={skill.id}
+                  skill={skill}
+                  checked={selected.includes(skill.id)}
+                  weight={weights[skill.id]}
+                  problems={counts[skill.id] ?? 0}
+                  source={defaults?.weights.find((w) => w.skill_id === skill.id)?.source ?? null}
+                  onToggle={(on) => toggle(skill.id, on)}
+                  onWeight={(value) => setEdited({ ...edited, [skill.id]: value })}
+                />
+              ))}
+            </ul>
+          )}
+          {waiting.length > 0 && (
+            <p className="mt-3 text-xs text-muted">
+              Not yet: {waiting.map((t) => t.title).join(", ")}. Slate has no checked problems for{" "}
+              {waiting.length === 1 ? "it" : "them"} yet.
+            </p>
           )}
         </fieldset>
       </Card>
@@ -232,7 +241,7 @@ function TopicRow({
   onToggle,
   onWeight,
 }: {
-  skill: SkillSummary;
+  skill: Pick<TopicCard, "id" | "title">;
   checked: boolean;
   weight: number | undefined;
   problems: number;

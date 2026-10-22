@@ -11,16 +11,16 @@ import { useSession } from "@/lib/session";
  * URL catches tricks like "/\\evil.com", which browsers read as "//evil.com".
  */
 export function safeNext(raw: string | null, origin?: string): string {
-  if (!raw || !raw.startsWith("/")) return "/library";
+  if (!raw || !raw.startsWith("/")) return "/dashboard";
   // There is no window while the page renders on the server. Any fixed base
   // gives the same answer for a same-origin path, so server and client agree.
   origin ??= typeof window === "undefined" ? "http://localhost" : window.location.origin;
   try {
     const url = new URL(raw, origin);
-    if (url.origin !== origin) return "/library";
+    if (url.origin !== origin) return "/dashboard";
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
-    return "/library";
+    return "/dashboard";
   }
 }
 
@@ -120,7 +120,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <p className="mt-6 text-sm text-text-2">
           {mode === "login" ? "New to Slate? " : "Already have an account? "}
           <Link
-            href={`${other}${next !== "/library" ? `?next=${encodeURIComponent(next)}` : ""}`}
+            href={`${other}${next !== "/dashboard" ? `?next=${encodeURIComponent(next)}` : ""}`}
             className="font-semibold text-accent-light underline-offset-4 hover:underline"
           >
             {mode === "login" ? "Create an account" : "Sign in"}

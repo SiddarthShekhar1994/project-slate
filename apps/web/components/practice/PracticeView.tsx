@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math/MathText";
 import { Spinner } from "@/components/shared/ui/Spinner";
 import { STATUS_LABELS, StatusPill } from "@/components/shared/ui/StatusPill";
 import { ApiError, api } from "@/lib/api";
+import { topicHref } from "@/lib/topics";
 import { replaceQuery } from "@/lib/urlState";
 import type { Grade, Worksheet, WorksheetItem, WorksheetStats } from "@/lib/types";
 import { clock } from "@/lib/format";
@@ -156,7 +158,16 @@ export function PracticeView({ worksheetId }: { worksheetId: string }) {
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <header className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-accent-tint-text">{KICKERS[sheet.mode] ?? "Practice"}</p>
+          {sheet.skills.length === 1 ? (
+            <Link
+              href={topicHref(sheet.skills[0].id, "worksheets")}
+              className="-my-3 inline-flex min-h-11 items-center text-sm font-semibold text-accent-tint-text underline-offset-4 hover:underline"
+            >
+              {KICKERS[sheet.mode] ?? "Practice"} · {sheet.skills[0].title}
+            </Link>
+          ) : (
+            <p className="text-sm font-semibold text-accent-tint-text">{KICKERS[sheet.mode] ?? "Practice"}</p>
+          )}
           {sheet.timer && !sheet.completed_at && <StudyTimer endsAt={sheet.timer.ends_at} now={sheet.timer.now} />}
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">{sheet.title}</h1>

@@ -19,8 +19,9 @@ def test_builtin_chain_rule_lesson_is_listed_and_viewable(signed_in):
     assert summary["kind"] == "builtin" and summary["steps"] >= 8 and summary["resume_step"] == 0
     view = signed_in.get(f"/api/lessons/{summary['id']}").json()
     assert view["script"]["skillId"] == CHAIN
-    assert [s["status"] for s in view["outline"]["skills"]] == ["new"] * 5
-    assert view["outline"]["unit"] == "Derivatives"
+    # The sidebar lists the student's own topics; this lesson's topic is there even before they add it.
+    assert [(s["id"], s["status"]) for s in view["outline"]["skills"]] == [(CHAIN, "new")]
+    assert view["outline"]["unit"] == "Your topics"
     assert view["tts"]["available"] is False  # no provider configured in tests
 
 

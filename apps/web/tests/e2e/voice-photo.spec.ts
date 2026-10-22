@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { keysFor, newWorksheet, signUp } from "./helpers";
+import { keysFor, newWorksheet, openChainRuleLesson, signUp } from "./helpers";
 
 // Chromium's fake microphone plays a tone; the API's fake transcriber turns
 // any recording into a fixed question (STT_PROVIDER=fake).
@@ -16,9 +16,7 @@ test("a spoken question lands in the box to check before asking", async ({ page 
   const status = await page.evaluate(async () => (await fetch("/api/voice")).json());
   test.skip(!status.available, "no speech provider (run the API with STT_PROVIDER=fake)");
 
-  await page.goto("/lesson");
-  await page.getByRole("link", { name: /Start lesson/ }).first().click();
-  await expect(page).toHaveURL(/\/lesson\/[0-9a-f-]+/);
+  await openChainRuleLesson(page);
 
   const mic = page.getByRole("button", { name: "Ask by voice" });
   await mic.click();

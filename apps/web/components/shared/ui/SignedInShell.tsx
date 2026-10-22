@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRequireUser } from "@/lib/session";
+import { TopicsProvider } from "@/lib/topics";
 import { AppShell } from "./AppShell";
 import { Spinner } from "./Spinner";
 
@@ -16,8 +17,10 @@ export function SignedInShell({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <AppShell userName={user.display_name} desktop={desktop}>
-      {children}
-    </AppShell>
+    <TopicsProvider>
+      <AppShell userName={user.display_name} desktop={desktop}>
+        {children}
+      </AppShell>
+    </TopicsProvider>
   );
 }

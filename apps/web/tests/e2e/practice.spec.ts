@@ -4,8 +4,8 @@ import { keysFor, newWorksheet, signUp } from "./helpers";
 const CHAIN = "calc1.derivatives.chain_rule";
 
 test("signed-out visitors are sent to sign in and back", async ({ page }) => {
-  await page.goto("/practice");
-  await expect(page).toHaveURL(/\/login\?next=%2Fpractice/);
+  await page.goto("/progress");
+  await expect(page).toHaveURL(/\/login\?next=%2Fprogress/);
 });
 
 test("miss, similar problem, hint ladder, then clear after retry", async ({ page }) => {

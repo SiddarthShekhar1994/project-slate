@@ -22,7 +22,7 @@ sys.stdout.buffer.write(doc.tobytes())
   return execFileSync("uv", ["run", "--quiet", "python", "-c", script], { cwd: ROOT });
 }
 
-test("upload a lecture, see what it covers, generate a cited lesson", async ({ page }) => {
+test("upload a lecture, see what it covers, get a lesson that cites it", async ({ page }) => {
   await signUp(page);
   await page.goto("/library");
   const chooser = page.waitForEvent("filechooser");
@@ -31,17 +31,18 @@ test("upload a lecture, see what it covers, generate a cited lesson", async ({ p
 
   const card = page.getByRole("article", { name: /lecture7[ _]chain[ _]rule|The chain rule/i });
   await expect(card.getByText("Ready")).toBeVisible({ timeout: 30_000 });
-  await expect(card.getByText("Chain rule", { exact: true })).toBeVisible();
   await expect(card.getByText("Not used yet")).toBeVisible();
 
-  await page.goto("/lesson");
-  await page.getByRole("button", { name: "Chain rule lesson" }).click();
-  await expect(page).toHaveURL(/\/lesson\/[0-9a-f-]+/, { timeout: 60_000 });
-  await expect(page.getByRole("heading", { name: "Built from" })).toBeVisible();
-  await expect(page.getByText(/lecture7|chain rule/i).first()).toBeVisible();
+  // The topic it covers links to that topic's page, where a new lesson is written from the lecture.
+  await card.getByRole("link", { name: "Chain rule", exact: true }).click();
+  await expect(page).toHaveURL(/\/topics\/calc1\.derivatives\.chain_rule/);
+  await page.getByRole("link", { name: "Lesson", exact: true }).click();
+  await page.getByRole("button", { name: "Write a new lesson" }).click();
+  await expect(page.getByText(/Built from .*(lecture7|chain rule)/i)).toBeVisible({ timeout: 60_000 });
 
   await page.goto("/library");
-  await expect(card.getByRole("link").first()).toBeVisible();
+  await expect(card.getByText("Ready")).toBeVisible();
+  await expect(card.getByText("Not used yet")).toHaveCount(0);
 });
 
 test("unsupported files are explained", async ({ page }) => {

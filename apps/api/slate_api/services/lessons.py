@@ -14,13 +14,14 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from slate_skills import get_skill, skill_owner
+from slate_skills import get_skill
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..db import upsert
-from ..models import CheckpointAnswer, Citation, Lesson, LessonProgress, User
+from ..models import CheckpointAnswer, Citation, Lesson, LessonProgress, MaterialProblem, User
 from . import tts
+from .llm import get_llm
 from .mastery import skill_mastery
 from .verify.claims import script_is_sound
 
@@ -72,10 +73,11 @@ def sync_builtin_lessons(db: Session, directory: Path = BUILTIN_DIR) -> list[str
     return loaded
 
 
-def visible_lessons(db: Session, user: User) -> list[Lesson]:
-    return list(db.scalars(
-        select(Lesson).where(or_(Lesson.user_id.is_(None), Lesson.user_id == user.id)).order_by(Lesson.created_at)
-    ))
+def visible_lessons(db: Session, user: User, skill_ids: list[str] | None = None) -> list[Lesson]:
+    query = select(Lesson).where(or_(Lesson.user_id.is_(None), Lesson.user_id == user.id))
+    if skill_ids is not None:
+        query = query.where(Lesson.skill_id.in_(skill_ids))
+    return list(db.scalars(query.order_by(Lesson.created_at)))
 
 
 def get_lesson(db: Session, user: User, lesson_id: uuid.UUID) -> Lesson:
@@ -123,22 +125,25 @@ def lesson_summary(db: Session, user: User, lesson: Lesson) -> dict:
     }
 
 
+def _outline(db: Session, user: User, skill_id: str) -> list[dict]:
+    """The student's topics for the player's sidebar, this lesson's topic included."""
+    from .topics import topic_ids
+
+    ids = topic_ids(db, user.id)
+    if skill_id not in ids:
+        ids.insert(0, skill_id)
+    mastery = skill_mastery(db, user.id, ids)
+    return [{"id": s, "title": get_skill(s).title, "mastery": mastery[s].mastery, "status": mastery[s].status}
+            for s in ids]
+
+
 def lesson_view(db: Session, user: User, lesson: Lesson) -> dict:
     skill = get_skill(lesson.skill_id)
-    _, unit = skill_owner(skill.id)
-    unit_ids = [s.id for s in unit.skills]
-    mastery = skill_mastery(db, user.id, unit_ids)
     return {
         "id": str(lesson.id),
         "script": lesson.script,
         "skill": {"id": skill.id, "title": skill.title},
-        "outline": {
-            "unit": unit.title,
-            "skills": [
-                {"id": s.id, "title": s.title, "mastery": mastery[s.id].mastery, "status": mastery[s.id].status}
-                for s in unit.skills
-            ],
-        },
+        "outline": {"unit": "Your topics", "skills": _outline(db, user, skill.id)},
         "sources": [
             {"id": s["id"], "title": s["title"], "kind": s.get("kind", "source"), "locator": s.get("locator", "")}
             for s in lesson.script.get("sources", [])
@@ -196,28 +201,50 @@ def latest_lesson(db: Session, user: User) -> tuple[Lesson, int] | None:
     return (lesson, progress.step) if lesson else None
 
 
-def generate_from_sources(db: Session, user: User, skill_id: str, *, llm=None, seed: int = 0) -> Lesson:
-    """Write a lesson for ``skill_id`` from the student's own sources, cited and verified."""
+def topic_examples(db: Session, user_id: uuid.UUID, skill_id: str, limit: int = 6) -> list[dict]:
+    """Checked problems on the topic from the student's materials, sheets first, for the lesson to teach toward."""
+    rows = db.scalars(select(MaterialProblem).where(
+        MaterialProblem.user_id == user_id, MaterialProblem.skill_id == skill_id, MaterialProblem.status == "ready",
+    ).order_by(MaterialProblem.origin, MaterialProblem.position).limit(limit))
+    return [{"statement": r.statement or r.prompt, "answer": r.claimed} for r in rows]
+
+
+def can_write_lesson(skill_id: str, *, llm=None) -> bool:
+    """Claude can write a lesson on anything; without it only built-in skills (the composer) can have one."""
+    from .lesson_gen.generate import can_compose
+
+    llm = llm if llm is not None else get_llm()
+    return llm.available or can_compose(skill_id)
+
+
+def generate_for_topic(db: Session, user: User, skill_id: str, *, llm=None, seed: int = 0) -> Lesson:
+    """Write a lesson on ``skill_id`` (any topic), from the student's own sources when they cover it, verified."""
     from .lesson_gen import ChunkRef, generate_lesson_script
     from .sources import chunks_for_skill, notation_for_user
 
+    llm = llm if llm is not None else get_llm()
     try:
         get_skill(skill_id)
     except KeyError:
-        raise LessonError("Unknown skill.", 422) from None
+        raise LessonError("Unknown topic.", 422) from None
+    if not can_write_lesson(skill_id, llm=llm):
+        raise LessonError("Writing a lesson on this topic needs a Claude API key. Add one in Settings.", 409)
     found = chunks_for_skill(db, user.id, skill_id)
-    if not found:
-        raise LessonError("None of your sources cover this skill yet. Upload slides or notes about it first.", 422)
     refs = [
         ChunkRef(id=str(chunk.id), source_title=source.title, source_kind=source.kind, locator=chunk.locator,
                  heading=chunk.heading, text=chunk.text)
         for chunk, source in found
     ]
-    result = generate_lesson_script(skill_id, refs, notation_for_user(db, user.id), llm=llm, seed=seed)
-    record = verification_record(result.script)
-    if not record["ok"]:
-        raise LessonError("Slate couldn't build a lesson whose math checked out. Try again.", 502)
-    record["method"] = result.method
+    try:
+        result = generate_lesson_script(skill_id, refs, notation_for_user(db, user.id), llm=llm, seed=seed,
+                                        examples=topic_examples(db, user.id, skill_id))
+    except ValueError as exc:
+        log.info("no lesson for %s: %s", skill_id, exc)
+        raise LessonError("Slate couldn't write a lesson whose math all checked out. Try again in a minute.",
+                          502) from None
+    record = {**result.record, "method": result.method}
+    if not record.get("ok"):
+        raise LessonError("Slate couldn't write a lesson whose math all checked out. Try again in a minute.", 502)
     lesson = Lesson(user_id=user.id, skill_id=skill_id, kind="generated", slug=None,
                     title=result.script["title"][:200], summary=result.script.get("summary", ""),
                     script=result.script, verification=record, verified_at=_now())

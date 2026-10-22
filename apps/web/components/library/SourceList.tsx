@@ -9,6 +9,7 @@ import { Card } from "@/components/shared/ui/Card";
 import { Spinner } from "@/components/shared/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { topicHref } from "@/lib/topics";
 import type { SourceView } from "@/lib/types";
 
 const size = (bytes: number) =>
@@ -89,17 +90,31 @@ function SourceCard({ source, onReplace, onDelete }: {
             <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Covers</dt>
             <dd className="mt-1 flex flex-wrap gap-1.5">
               {found ? (
-                reading.topics.map((topic) => (
-                  <span key={topic.id ?? topic.title} className="rounded-full bg-raised px-2.5 py-0.5 text-xs text-text-2">
-                    {topic.title}
-                    {topic.problems > 0 && <span className="text-muted"> · {topic.problems}</span>}
-                  </span>
-                ))
+                reading.topics.map((topic) =>
+                  topic.id ? (
+                    <Link
+                      key={topic.id}
+                      href={topicHref(topic.id)}
+                      className="inline-flex min-h-8 items-center rounded-full bg-raised px-2.5 py-0.5 text-xs text-text-2 hover:bg-hover hover:text-text"
+                    >
+                      {topic.title}
+                      {topic.problems > 0 && <span className="text-muted">&nbsp;· {topic.problems}</span>}
+                    </Link>
+                  ) : (
+                    <span key={topic.title} className="rounded-full bg-raised px-2.5 py-0.5 text-xs text-text-2">
+                      {topic.title}
+                    </span>
+                  ),
+                )
               ) : source.skills.length ? (
                 source.skills.slice(0, 5).map((skill) => (
-                  <span key={skill.id} className="rounded-full bg-raised px-2.5 py-0.5 text-xs text-text-2">
+                  <Link
+                    key={skill.id}
+                    href={topicHref(skill.id)}
+                    className="inline-flex min-h-8 items-center rounded-full bg-raised px-2.5 py-0.5 text-xs text-text-2 hover:bg-hover hover:text-text"
+                  >
                     {skill.title}
-                  </span>
+                  </Link>
                 ))
               ) : reading?.status === "pending" ? (
                 <span className="text-text-2">Reading the problems…</span>

@@ -10,7 +10,7 @@ from ..db import get_db
 from ..deps import current_user
 from ..models import User
 from ..schemas import ExamAnswerIn, ExamIn
-from ..services import exam, practice
+from ..services import exam, practice, topics
 
 router = APIRouter(prefix="/exam", tags=["exam"])
 
@@ -23,8 +23,9 @@ def _fail(exc: practice.PracticeError) -> HTTPException:
 def weights(skills: str = Query(default="", max_length=2000), user: User = Depends(current_user),
             db: Session = Depends(get_db)) -> dict:
     """Suggested weights for the chosen topics, from the syllabus when there is one."""
-    known = [s.id for s in all_skills()]
-    chosen = [s for s in skills.split(",") if s in known] if skills else known
+    mine = topics.topic_ids(db, user.id)
+    known = set(mine) | {s.id for s in all_skills()}
+    chosen = [s for s in skills.split(",") if s in known] if skills else mine
     return {"weights": exam.default_weights(db, user.id, chosen), "minutes": exam.MINUTES,
             "study_factor": exam.STUDY_FACTOR}
 

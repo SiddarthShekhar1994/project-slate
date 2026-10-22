@@ -22,7 +22,7 @@ from slate_api.models import Base
 
 API_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 # Everything a test can create; skills and built-in lessons are synced at startup.
-USER_TABLES = ("citations", "material_problems", "topics", "source_chunks", "sources", "lesson_questions",
+USER_TABLES = ("citations", "material_problems", "topic_pins", "topics", "source_chunks", "sources", "lesson_questions",
                "checkpoint_answers", "lesson_progress", "skill_cards", "mistake_tags", "attempts", "worksheet_items",
                "worksheets", "problems", "auth_sessions", "users")
 

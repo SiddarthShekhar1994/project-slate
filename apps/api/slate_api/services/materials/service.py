@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
@@ -24,7 +25,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ...db import get_engine
-from ...models import MaterialProblem, Problem, Skill, Source, SourceChunk, Topic, User
+from ...models import MaterialProblem, Problem, Skill, Source, SourceChunk, Topic, TopicPin, User
 from .. import sandbox
 from ..llm import LLMRefused, LLMUnavailable, get_llm
 from ..problem_gen import VerifiedProblem
@@ -103,20 +104,60 @@ def resolve_topic(skill_id: str) -> SkillSpec | None:
 set_extra_resolver(resolve_topic)
 
 
-def ensure_topic(db: Session, user_id: uuid.UUID, name: str, summary: str = "") -> str:
+def normalize_title(text: str) -> str:
+    """For telling whether two names mean the same topic: "L'Hôpital's Rule" and "lhopitals rule" do."""
+    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    plain = re.sub(r"['’`]", "", plain)
+    plain = re.sub(r"[^a-z0-9]+", " ", plain).strip()
+    return re.sub(r"^the ", "", plain)
+
+
+def find_topic(db: Session, user_id: uuid.UUID, name: str) -> Topic | None:
+    """The student's topic with this name, hidden or not."""
+    wanted = normalize_title(name)
+    for topic in db.scalars(select(Topic).where(Topic.user_id == user_id)):
+        if normalize_title(topic.title) == wanted:
+            return topic
+    return None
+
+
+def ensure_topic(db: Session, user_id: uuid.UUID, name: str, summary: str = "", *, origin: str = "upload") -> str:
     """The id of the student's topic called ``name``, creating it if needed."""
     title = re.sub(r"\s+", " ", name).strip()[:120] or "Other problems"
-    topic_id = f"{TOPIC_PREFIX}.{user_id.hex[:12]}.{_slug(title)}"
-    topic = db.get(Topic, topic_id)
+    topic = find_topic(db, user_id, title)
+    if topic is None:
+        topic_id = f"{TOPIC_PREFIX}.{user_id.hex[:12]}.{_slug(title)}"
+        topic = db.get(Topic, topic_id)
     if topic is None:
         db.add(Skill(id=topic_id, course_id="materials", unit_id="materials", slug=_slug(title)[:60], title=title,
                      summary=summary.strip(), position=10_000))
         db.flush()
-        topic = Topic(id=topic_id, user_id=user_id, title=title, summary=summary.strip())
+        topic = Topic(id=topic_id, user_id=user_id, title=title, summary=summary.strip(), origin=origin)
         db.add(topic)
         db.flush()
+    elif topic.hidden:
+        # Removed from the dashboard earlier, and now it's back in an upload or asked for again.
+        topic.hidden = False
+    if summary.strip() and not topic.summary:
+        topic.summary = summary.strip()
     register_extra(topic_spec(topic))
-    return topic_id
+    return topic.id
+
+
+def pin_skill(db: Session, user_id: uuid.UUID, skill_id: str) -> None:
+    """Put a built-in skill on the student's dashboard."""
+    if db.get(TopicPin, (user_id, skill_id)) is None:
+        db.add(TopicPin(user_id=user_id, skill_id=skill_id))
+        db.flush()
+
+
+def note_topic(db: Session, user_id: uuid.UUID, skill_id: str) -> None:
+    """A source covers this topic: a built-in skill goes on the student's dashboard.
+
+    (The student's own topics are on it already; which sources cover a topic
+    is read from the chunks the reading scored for it.)"""
+    if is_builtin(skill_id):
+        pin_skill(db, user_id, skill_id)
 
 
 def _resolve(db: Session, user_id: uuid.UUID, topic: TopicOut) -> str:
@@ -203,9 +244,12 @@ def store_reading(db: Session, source: Source, chunks: list[SourceChunk], topics
     db.execute(delete(MaterialProblem).where(MaterialProblem.source_id == source.id,
                                              MaterialProblem.origin == "sheet"))
     by_name = {t.name.strip().lower(): _resolve(db, user_id, t) for t in topics}
+    for skill_id in by_name.values():
+        note_topic(db, user_id, skill_id)
     rows = []
     for position, problem in enumerate(problems):
         skill_id = _skill_for(db, user_id, problem, by_name)
+        note_topic(db, user_id, skill_id)
         chunk = chunks[problem.chunk - 1] if 1 <= problem.chunk <= len(chunks) else None
         row = _checked_row(problem, user_id=user_id, skill_id=skill_id, origin="sheet", position=position,
                            source_id=source.id, chunk_id=chunk.id if chunk else None)
@@ -250,8 +294,9 @@ def read_source(source_id: uuid.UUID, *, llm=None, variants: bool = True) -> Non
             chunks = list(source.chunks)
             blocks = [Block(i + 1, c.locator, c.text) for i, c in enumerate(chunks)]
             images = page_images(get_storage().get(source.storage_key), source.mime)
+            known = [t.title for t in db.scalars(select(Topic).where(Topic.user_id == source.user_id))]
             reading = read_material(llm, title=source.title, kind_label=KIND_LABELS[source.kind], blocks=blocks,
-                                    images=images)
+                                    images=images, known=known)
             rows = store_reading(db, source, chunks, reading.topics, reading.problems)
             source.reading = {"status": "done", "at": _now().isoformat(), "model": llm.model}
             db.commit()
@@ -274,6 +319,9 @@ def read_source(source_id: uuid.UUID, *, llm=None, variants: bool = True) -> Non
             return
     if variants:
         fill_variants(source_id, llm=llm)
+    from ..topics import build_lessons_for_source
+
+    build_lessons_for_source(source_id, llm=llm)
 
 
 def needs_reading(source: Source, llm_available: bool) -> bool:
@@ -305,7 +353,7 @@ def _example(row: MaterialProblem) -> dict:
 
 
 def add_variants(db: Session, user_id: uuid.UUID, skill_id: str, count: int, examples: list[MaterialProblem],
-                 *, llm=None) -> list[MaterialProblem]:
+                 *, llm=None, spread: bool = False) -> list[MaterialProblem]:
     """Have Claude write ``count`` problems for ``skill_id`` like ``examples``; keep the ones that check out."""
     llm = llm if llm is not None else get_llm()
     if not llm.available:
@@ -313,13 +361,18 @@ def add_variants(db: Session, user_id: uuid.UUID, skill_id: str, count: int, exa
     skill = get_skill(skill_id)
     try:
         written = write_variants(llm, topic=skill.title, summary=skill.summary,
-                                 examples=[_example(r) for r in examples[:4]], count=count)
+                                 examples=[_example(r) for r in examples[:4]], count=count, spread=spread)
     except (LLMUnavailable, LLMRefused) as exc:
         log.info("couldn't write variants for %s: %s", skill_id, exc)
         return []
+    return store_written(db, user_id, skill_id, written, parent=examples[0].id if examples else None)
+
+
+def store_written(db: Session, user_id: uuid.UUID, skill_id: str, written: list[ProblemOut], *,
+                  parent: uuid.UUID | None = None) -> list[MaterialProblem]:
+    """Check problems Claude wrote for a topic and keep the new ones that check out."""
     start = (db.scalar(select(MaterialProblem.position).where(MaterialProblem.user_id == user_id)
                        .order_by(MaterialProblem.position.desc()).limit(1)) or 0) + 1
-    parent = examples[0].id if examples else None
     known = set(db.scalars(select(MaterialProblem.signature).where(MaterialProblem.user_id == user_id,
                                                                     MaterialProblem.skill_id == skill_id)))
     kept = []

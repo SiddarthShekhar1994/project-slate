@@ -30,10 +30,10 @@ def list_lessons(user: User = Depends(current_user), db: Session = Depends(get_d
 
 @router.post("/generate", status_code=201)
 async def generate(body: GenerateLessonIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
-    """Generate a lesson from the student's sources. Slow with Claude (it writes and
-    we verify, up to three tries), so it runs off the event loop."""
+    """Generate a lesson on any topic, from the student's sources when they cover it. Slow
+    with Claude (it writes and we verify, up to three tries), so it runs off the event loop."""
     try:
-        lesson = await run_in_threadpool(lessons.generate_from_sources, db, user, body.skill_id)
+        lesson = await run_in_threadpool(lessons.generate_for_topic, db, user, body.skill_id)
     except lessons.LessonError as exc:
         raise HTTPException(exc.code, str(exc)) from None
     db.commit()
