@@ -75,6 +75,19 @@ jobs:
           export TEMP="$RUNNER_TEMP" TMP="$RUNNER_TEMP"  # so a failed run's app logs can be collected below
           pnpm --dir apps/desktop test
 
+      # The same test run from a clone, as the README describes, with a Next dev
+      # server left over from an earlier session still running: the app has to
+      # stop it before starting its own, and stop everything it started on quit.
+      - name: Test the app run from source
+        timeout-minutes: 20
+        run: |
+          pnpm --dir apps/web install --frozen-lockfile
+          pnpm --dir apps/web dev --port 3999 > "$RUNNER_TEMP/leftover-next.log" 2>&1 &
+          for i in $(seq 1 180); do [ -f apps/web/.next/dev/lock ] && break; sleep 1; done
+          cat apps/web/.next/dev/lock || { cat "$RUNNER_TEMP/leftover-next.log"; exit 1; }
+          export TEMP="$RUNNER_TEMP" TMP="$RUNNER_TEMP"
+          pnpm --dir apps/desktop test --timeout=600000
+
       - name: Show the app's logs from a failed test
         if: failure()
         run: |

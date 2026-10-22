@@ -12,13 +12,14 @@
 // SLATE_WEB_DIR points at one.
 
 const { app, BrowserWindow, Menu, dialog, session, shell, utilityProcess } = require("electron");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 
 const REPO = path.resolve(__dirname, "..", "..");
+const WEB_DIR = path.join(REPO, "apps", "web");
 const BACKEND_START_MS = 180_000; // first launch: unpack, migrate, import SymPy
 const WEB_START_MS = 120_000;
 
@@ -108,7 +109,71 @@ function startBackend(port, dataDir) {
   return child;
 }
 
-function startWeb(port, apiPort) {
+// Running from source, the interface is `next dev`, a few processes below the
+// pnpm that this starts. Stopping pnpm alone leaves Next running, and Next then
+// refuses to start a second dev server for the same folder, so the next launch
+// failed ("The Slate interface stopped while starting"). The whole tree is
+// stopped on quit, and a server left over from an earlier session is stopped
+// before a new one starts.
+
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+function processInfo(pid) {
+  // The parent and command line of a process, or null.
+  let out;
+  if (process.platform === "win32") {
+    // No double quotes in the command: they don't survive Windows argument quoting intact.
+    const query = `Get-CimInstance Win32_Process -Filter ProcessId=${pid} | ForEach-Object { [string]$_.ParentProcessId + ' ' + $_.CommandLine }`;
+    out = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", query], {
+      encoding: "utf8", windowsHide: true, timeout: 15_000,
+    });
+  } else {
+    out = spawnSync("ps", ["-o", "ppid=", "-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+  }
+  const match = (out.stdout || "").trim().match(/^(\d+)\s+(.+)$/s);
+  return match ? { parent: Number(match[1]), command: match[2] } : null;
+}
+
+function killTree(pid, { group = false } = {}) {
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+    return;
+  }
+  try {
+    process.kill(group ? -pid : pid, "SIGTERM");
+  } catch {
+    // already gone
+  }
+}
+
+async function stopLeftoverDevServer(log) {
+  let pid;
+  try {
+    pid = JSON.parse(fs.readFileSync(path.join(WEB_DIR, ".next", "dev", "lock"), "utf8")).pid;
+  } catch {
+    return; // no lock: nothing is running
+  }
+  if (!Number.isInteger(pid) || pid <= 0 || !isRunning(pid)) return;
+  const info = processInfo(pid);
+  if (!info || !/next/i.test(info.command)) return; // the lock is stale and the pid belongs to something else
+  // Stop the `next dev` that started the server as well, or it may start another.
+  let top = pid;
+  const parent = processInfo(info.parent);
+  if (parent && /next/i.test(parent.command) && /\bdev\b/.test(parent.command)) top = info.parent;
+  fs.writeSync(log, `Stopping an earlier Slate interface that was still running (process ${top}).\n`);
+  killTree(top);
+  if (top !== pid) killTree(pid);
+  for (let i = 0; i < 50 && isRunning(pid); i += 1) await sleep(100);
+}
+
+async function startWeb(port, apiPort) {
   const log = openLog("web.log");
   const env = {
     ...process.env,
@@ -133,17 +198,30 @@ function startWeb(port, apiPort) {
     });
     return child;
   }
-  const child = spawn("pnpm", ["--dir", path.join(REPO, "apps", "web"), "dev", "--port", String(port)], {
+  await stopLeftoverDevServer(log);
+  const child = spawn("pnpm", ["--dir", WEB_DIR, "dev", "--port", String(port)], {
     env,
     stdio: ["ignore", log, log],
     shell: process.platform === "win32",
     windowsHide: true,
+    // Its own process group, so quitting can stop Next along with pnpm (see stopWeb).
+    detached: process.platform !== "win32",
   });
   child.alive = true;
+  child.devTree = true;
   child.on("exit", () => {
     child.alive = false;
   });
   return child;
+}
+
+function stopWeb(web) {
+  if (!web.devTree) {
+    web.kill();
+    return;
+  }
+  // pnpm, then `next dev`, then Next's server and its workers: stop them all.
+  killTree(web.pid, { group: true });
 }
 
 function isLocal(url) {
@@ -204,7 +282,7 @@ async function start() {
 
   state.backend = startBackend(apiPort, dataDir);
   await waitFor(`http://127.0.0.1:${apiPort}/api/health`, BACKEND_START_MS, () => state.backend.alive, "The Slate backend");
-  state.web = startWeb(webPort, apiPort);
+  state.web = await startWeb(webPort, apiPort);
   state.origin = `http://127.0.0.1:${webPort}`;
   await waitFor(`${state.origin}/api/health`, WEB_START_MS, () => state.web.alive, "The Slate interface");
   if (state.window) await state.window.loadURL(`${state.origin}/library`);
@@ -214,7 +292,7 @@ function stopChildren() {
   const { backend, web } = state;
   state.web = null;
   state.backend = null;
-  if (web?.alive) web.kill();
+  if (web?.alive) stopWeb(web);
   if (backend?.alive) {
     backend.stdin?.end(); // the backend exits by itself when its stdin closes
     setTimeout(() => {
