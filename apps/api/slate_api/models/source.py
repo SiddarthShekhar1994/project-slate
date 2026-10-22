@@ -38,6 +38,8 @@ class Source(Base):
     error: Mapped[str | None] = mapped_column(Text)
     pages: Mapped[int | None] = mapped_column(Integer)
     ocr_method: Mapped[str | None] = mapped_column(String(40))
+    # How the problems on it were read: {"status": "pending" | "done" | "failed" | "no_key", ...}.
+    reading: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
     created_at: Mapped[datetime] = timestamp_column()
     processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 

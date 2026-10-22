@@ -3,12 +3,14 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Icon } from "@/components/shared/ui/Icon";
 import { ApiError, api } from "@/lib/api";
-import type { Preview } from "@/lib/types";
+import type { AnswerKind, Preview } from "@/lib/types";
 import { Tex } from "@/components/shared/math/Tex";
 
 type Props = {
   variables: string[];
-  answerKind: "expression" | "number";
+  answerKind: AnswerKind;
+  /** A word problem's number may end with a unit (ft/s); the grader ignores it. */
+  units?: boolean;
   disabled?: boolean;
   busy?: boolean;
   /** Another request is in flight: keep typing allowed but hold submission. */
@@ -25,7 +27,9 @@ type Props = {
   prompt?: string;
 };
 
-const INSERTS: { label: string; aria: string; text: string; caret: number }[] = [
+type Insert = { label: string; aria: string; text: string; caret: number };
+
+const INSERTS: Insert[] = [
   { label: "xⁿ", aria: "Insert power", text: "^", caret: 1 },
   { label: "√", aria: "Insert square root", text: "sqrt()", caret: 5 },
   { label: "( )", aria: "Insert brackets", text: "()", caret: 1 },
@@ -33,6 +37,16 @@ const INSERTS: { label: string; aria: string; text: string; caret: number }[] = 
   { label: "ln", aria: "Insert natural log", text: "ln()", caret: 3 },
   { label: "π", aria: "Insert pi", text: "pi", caret: 2 },
 ];
+
+// Extra keys for answers that aren't a single expression.
+const KIND_INSERTS: Partial<Record<AnswerKind, Insert[]>> = {
+  limit: [
+    { label: "∞", aria: "Insert infinity", text: "oo", caret: 2 },
+    { label: "DNE", aria: "Insert does not exist", text: "DNE", caret: 3 },
+  ],
+  antiderivative: [{ label: "+ C", aria: "Insert plus C", text: " + C", caret: 4 }],
+  line: [{ label: "y =", aria: "Insert y equals", text: "y = ", caret: 4 }],
+};
 
 /**
  * Text answer with a live KaTeX preview of how the server reads it.
@@ -47,6 +61,7 @@ function Key({ children }: { children: ReactNode }) {
 export function AnswerInput({
   variables,
   answerKind,
+  units = false,
   disabled,
   busy,
   blocked,
@@ -79,7 +94,7 @@ export function AnswerInput({
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       api
-        .preview(text, variableKey.split(","), controller.signal)
+        .preview(text, variableKey.split(",").filter(Boolean), controller.signal, answerKind, units)
         .then((result) => setPreview({ text, result }))
         .catch(() => undefined);
     }, 220);
@@ -87,7 +102,7 @@ export function AnswerInput({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [text, variableKey]);
+  }, [text, variableKey, answerKind, units]);
 
   function insert(snippet: string, caret: number) {
     const input = inputRef.current;
@@ -121,16 +136,40 @@ export function AnswerInput({
 
   const shown = preview && preview.text === text && text.trim() ? preview.result : null;
   const vars = variables.join(" and ");
-  const help =
-    answerKind === "number" ? (
+  const help = {
+    number: (
       <>
         Enter a number. Fractions with <Key>/</Key>, roots with <Key>sqrt()</Key> and <Key>e</Key> are fine.
       </>
-    ) : (
+    ),
+    values: (
+      <>
+        Separate the values with commas, like <Key>-2, 2</Key>. Type <Key>none</Key> if there aren&apos;t any.
+      </>
+    ),
+    limit: (
+      <>
+        Type a number, <Key>oo</Key> for infinity, <Key>-oo</Key>, or <Key>DNE</Key> if the limit doesn&apos;t
+        exist.
+      </>
+    ),
+    line: (
+      <>
+        Type the line as <Key>y = mx + b</Key>. Point-slope form works too.
+      </>
+    ),
+    antiderivative: (
+      <>
+        Use {vars}, and end with <Key>+ C</Key>. Type <Key>^</Key> for powers.
+      </>
+    ),
+    expression: (
       <>
         Use {vars}. Type <Key>^</Key> for powers and <Key>sqrt()</Key> for roots. Pasted superscripts work too.
       </>
-    );
+    ),
+  }[answerKind];
+  const inserts = [...(KIND_INSERTS[answerKind] ?? []), ...INSERTS];
 
   return (
     <form
@@ -168,7 +207,7 @@ export function AnswerInput({
         </button>
       </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Insert symbols">
-        {INSERTS.map((item) => (
+        {inserts.map((item) => (
           <button
             key={item.label}
             type="button"

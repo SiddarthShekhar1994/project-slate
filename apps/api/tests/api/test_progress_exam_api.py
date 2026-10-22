@@ -300,7 +300,7 @@ def test_photo_endpoint(signed_in, client, monkeypatch):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["text"] == "2x*cos(x^2)" and "\\cos" in body["latex"] and body["method"] == "claude"
-    assert signed_in.post("/api/math/photo", files={"image": image}, data={"variables": "z"}).status_code == 422
+    assert signed_in.post("/api/math/photo", files={"image": image}, data={"variables": "q"}).status_code == 422
     r = signed_in.post("/api/math/photo", files={"image": ("a.txt", b"not an image", "text/plain")})
     assert r.status_code == 422
     signed_in.post("/api/auth/logout")

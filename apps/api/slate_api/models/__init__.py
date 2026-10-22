@@ -3,6 +3,7 @@
 from .base import Base
 from .catalog import Skill
 from .lesson import CheckpointAnswer, Lesson, LessonProgress, LessonQuestion
+from .material import MATERIAL_ORIGINS, MATERIAL_STATUSES, MaterialProblem, Topic
 from .practice import (
     ITEM_STATUSES,
     WORKSHEET_MODES,
@@ -18,6 +19,7 @@ from .user import AuthSession, User
 
 __all__ = [
     "ITEM_STATUSES", "Attempt", "AuthSession", "Base", "CheckpointAnswer", "Lesson", "LessonProgress",
-    "LessonQuestion", "MistakeTag", "Problem", "SOURCE_KINDS", "Skill", "SkillCard", "Citation", "Source", "SourceChunk", "User",
+    "LessonQuestion", "MATERIAL_ORIGINS", "MATERIAL_STATUSES", "MaterialProblem", "MistakeTag", "Problem",
+    "SOURCE_KINDS", "Skill", "SkillCard", "Citation", "Source", "SourceChunk", "Topic", "User",
     "WORKSHEET_MODES", "Worksheet", "WorksheetItem",
 ]

@@ -43,6 +43,7 @@ export function Feedback({ grade, solution, onSimilar, onNext, busy }: Props) {
             You answered <Tex latex={grade.latex} />
           </p>
         )}
+        {grade.message && <MathText as="p" text={grade.message} className="text-sm text-text-2" />}
         {solution && (
           <details className="text-sm">
             <summary className="min-h-11 cursor-pointer content-center font-semibold text-text-2">

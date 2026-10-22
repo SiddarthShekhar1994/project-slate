@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -19,6 +21,10 @@ class LoginIn(BaseModel):
 class PreviewIn(BaseModel):
     text: str = Field(max_length=500)
     variables: list[str] = Field(default_factory=lambda: ["x"], max_length=3)
+    # How the answer is read: an expression (the default), a number, a line, a list of values, a limit or an
+    # antiderivative; see services/materials/answers.py.
+    answer_kind: Literal["expression", "number", "line", "values", "limit", "antiderivative"] = "expression"
+    units: bool = False  # a word problem's number may end with a unit, like ft/s
 
 
 class WorksheetIn(BaseModel):

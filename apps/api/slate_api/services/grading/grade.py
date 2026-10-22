@@ -275,9 +275,17 @@ def _rounded_match(student: sp.Expr, key: sp.Expr, places: int) -> bool:
         return False
 
 
+TEMPLATE_TASKS = ("differentiate", "implicit_differentiate")
+
+
 def grade_answer(problem: VerifiedProblem, raw: str) -> Grade:
     """Grade ``raw`` against a verified problem."""
     built = problem.built
+    if built.task not in TEMPLATE_TASKS:
+        # Limits, tangent lines, lists of values... from course materials.
+        from ..materials.answers import grade_material
+
+        return grade_material(problem, raw)
     try:
         parsed = parse_answer(raw, built.symbols)
     except ParseError as exc:

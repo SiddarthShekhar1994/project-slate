@@ -13,9 +13,10 @@ from .engine import (
     restore,
     similar,
     verify_and_wrap,
+    wrap_material,
 )
 
 __all__ = [
     "GenerationError", "RenderedHints", "VerifiedProblem", "build_worksheet", "derive_seed", "generate",
-    "plan_difficulties", "problem_signature", "rebuild", "restore", "similar", "verify_and_wrap",
+    "plan_difficulties", "problem_signature", "rebuild", "restore", "similar", "verify_and_wrap", "wrap_material",
 ]

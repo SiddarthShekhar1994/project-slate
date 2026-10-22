@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   },
   // Let the dev server answer 127.0.0.1 as well as localhost (tests use it).
   allowedDevOrigins: ["127.0.0.1"],
+  // The development badge sits over the sidebar's footer when the Windows app runs from source.
+  devIndicators: false,
   // Slate's pages are interactive client views that fetch on the client, so
   // Cache Components and partial prefetching are left off (see the v16
   // upgrade guide: enable them only when adopting that model).

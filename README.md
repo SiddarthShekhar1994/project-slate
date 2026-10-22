@@ -4,13 +4,15 @@ Slate is a study app for math courses, built around your own course materials. I
 
 The first course is single-variable calculus (MATH 30 level), starting with the derivative unit: power, product, quotient and chain rules, plus implicit differentiation. Courses are data in `packages/skills`, so adding one doesn't touch the app.
 
+Past those five rules, Slate works from your own materials. Upload a review sheet or a past exam and, with a Claude API key, it reads every problem on it and works out which topics they cover from the math itself, not the wording. The problems it can check become a graded worksheet in the sheet's order ("Practice this sheet"). A topic with no built-in skill, such as related rates, limits or optimization, becomes a practice topic of its own, with more problems like the ones on your sheet.
+
 Slate runs as a Windows app (one installer, no sign-in, everything stored on your PC) or as a website.
 
 ## The Windows app
 
 Download `Slate-Setup-<version>.exe` from the latest successful [Windows app](../../actions/workflows/windows-app.yml) run (under Artifacts), or from Releases once a version is tagged. Run it and pick where to install. Windows SmartScreen may warn that the publisher is unknown, because the installer isn't code-signed yet: choose "More info", then "Run anyway".
 
-Slate opens straight into your Library. Your library, progress and settings live in `%APPDATA%\Slate\data`, and uninstalling keeps them. Everything works offline without any keys. To turn on Claude-written lessons, the narrated voice and spoken questions, paste API keys on the Settings page.
+Slate opens straight into your Library. Your library, progress and settings live in `%APPDATA%\Slate\data`, and uninstalling keeps them. Everything works offline without any keys. To have Slate read the problems on your uploads, and for Claude-written lessons, the narrated voice and spoken questions, paste API keys on the Settings page. Sources you uploaded before adding a key are read as soon as you open the Library.
 
 Under the hood the app is the same code as the website. An Electron window (`apps/desktop`) starts the Python backend, packaged with PyInstaller and storing data in SQLite, and the Next.js interface on free ports on 127.0.0.1. Nothing listens on your network. The GitHub Actions workflow builds the installer on Windows, installs it, and drives the installed app through a practice session before keeping it.
 
@@ -39,6 +41,8 @@ To build the installer yourself, run `pnpm --dir apps/desktop dist:win`. It land
 - Answers are compared as math, not strings. Student input goes through a small Pratt parser that builds SymPy objects directly and never calls `eval`. A numeric screen at 30 digits rejects most wrong answers in milliseconds. A symbolic chain then proves the rest: `simplify`, then `fu`, rewrites, and `equals`, with reduction modulo the curve for implicit answers. Answers are compared on the key's real domain, so `cbrt(x^2)` and `x^(2/3)` count as the same function.
 - Every wrong answer gets a mistake tag. The tag comes from the skill's own mistake patterns (each computes the exact wrong answer that error produces), then from the expected intermediate steps, then from generic sign, coefficient, dropped-term and algebra-slip checks. Tags are stored per attempt and drive the Progress page.
 - Facts the LLM states get checked too. Lesson scripts and tutor answers carry their math as structured claims, which SymPy verifies before they're served. A checkpoint distractor that turns out to be secretly correct is caught.
+- Problems from your own materials follow the same rule. Claude reads each one into structured math: a limit's function and target, an equation to solve, or a related-rates problem's equation, values and known rates. SymPy computes the answer key from that itself. A problem is used only if Claude's own worked answer agrees with SymPy's key, judged the way a student's answer would be. When they disagree, or the problem asks for a proof or a sketch, the sheet lists it as not graded and says why. Retries get a fresh problem from the templates for the built-in rules, and otherwise from Claude, checked the same way.
+- Answers aren't always one expression. A tangent line can be typed as `y = 3x - 2` or in point-slope form. Solutions are a list (`x = ±2`), a limit can be `oo` or `DNE`, and an antiderivative is right when its derivative is the integrand, with a reminder about `+ C`. Each kind has its own mistake tags: a tangent line through the wrong point, a missed or extra solution, a one-sided limit.
 
 ## Layout
 
@@ -64,6 +68,8 @@ apps/
         tts.py            ElevenLabs or OpenAI speech with word timings, cached per step
         stt.py            spoken questions: OpenAI or ElevenLabs transcription
         photo.py          reads the final answer from a photo of the student's work
+        materials/        problems and topics read from your uploads: kinds.py (SymPy keys for limits,
+                          tangent lines, related rates and more), read.py, verify.py, answers.py, service.py
         app_settings.py   API keys entered in the Windows app's Settings page
         llm.py            the single Claude API wrapper
         sandbox.py        grading in a killable child process (warm worker pool on Windows)
@@ -136,7 +142,7 @@ Or point `DATABASE_URL` in `.env` at a database you already have. If Docker is i
 
 Without keys everything still works. Hints, notes and "ask about this step" fall back to the templated text in the skills package. Lessons you generate from your sources are composed from verified problems instead of written by Claude. Lessons play with captions on an estimated clock. Add keys to `.env` and restart:
 
-- `ANTHROPIC_API_KEY`: Claude writes lessons from your sources, answers questions, reads photos and scanned pages.
+- `ANTHROPIC_API_KEY`: Claude reads the problems and topics on your uploads, writes lessons from your sources, answers questions, and reads photos and scanned pages. Reading a source takes one request per few pages, plus one per new topic to write practice problems like the sheet's.
 - `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`: the narrated voice, and spoken questions in the ask panel. With both set, `TTS_PROVIDER` and `STT_PROVIDER` choose.
 
 Without `ANTHROPIC_API_KEY`, images and picture-only pages are read with Tesseract if it's installed (`brew install tesseract`, or `sudo apt install tesseract-ocr` on Linux and WSL). If neither is there, the page is kept but marked as unread.

@@ -161,8 +161,8 @@ export function PracticeView({ worksheetId }: { worksheetId: string }) {
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">{sheet.title}</h1>
         <p className="text-sm text-text-2">
-          {sheet.stats.total} problems, easy to hard. Miss one and you get a fresh problem of the same kind until it
-          clicks.
+          {sheet.stats.total} problems, {sheet.from_sheet ? "in your sheet's order" : "easy to hard"}. Miss one and you
+          get a fresh problem of the same kind until it clicks.
         </p>
       </header>
 

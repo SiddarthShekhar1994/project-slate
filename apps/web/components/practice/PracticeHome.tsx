@@ -15,6 +15,8 @@ export function PracticeHome() {
   const router = useRouter();
   const catalog = useApi(() => api.catalog());
   const recent = useApi(() => api.worksheets());
+  const materials = useApi(() => api.materialTopics());
+  const topics = materials.data?.topics ?? [];
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +55,57 @@ export function PracticeHome() {
             Recent worksheets
           </h2>
           <WorksheetList worksheets={recent.data.worksheets.slice(0, 4)} />
+        </section>
+      )}
+
+      {topics.length > 0 && (
+        <section aria-labelledby="materials-heading" className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="materials-heading" className="text-lg font-bold">
+                From your materials
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-text-2">
+                Topics Slate found in your uploads. Problems come from your sheets, plus similar ones Claude writes
+                and Slate checks the same way.
+              </p>
+            </div>
+            {topics.length > 1 && (
+              <button
+                type="button"
+                className={buttonClasses("secondary")}
+                disabled={starting !== null}
+                onClick={() => start("materials", topics.slice(0, 8).map((t) => t.id))}
+              >
+                {starting === "materials" ? "Building…" : "Mixed practice: your topics"}
+              </button>
+            )}
+          </div>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {topics.map((topic) => (
+              <li key={topic.id}>
+                <Card className="flex h-full flex-col gap-3 p-5">
+                  <div>
+                    <h3 className="font-bold text-text">{topic.title}</h3>
+                    {topic.summary && <p className="mt-1 text-sm text-text-2">{topic.summary}</p>}
+                    <p className="mt-1 text-xs text-muted">
+                      {topic.problems} checked {topic.problems === 1 ? "problem" : "problems"}
+                      {topic.sources.length > 0 ? ` · from ${topic.sources.join(", ")}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={buttonClasses("primary", "mt-auto self-start")}
+                    disabled={starting !== null}
+                    onClick={() => start(topic.id, [topic.id])}
+                    aria-label={`Practice ${topic.title.toLowerCase()}`}
+                  >
+                    {starting === topic.id ? "Building…" : "Practice"}
+                  </button>
+                </Card>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

@@ -445,6 +445,38 @@ def _picture_share(page: pymupdf.Page) -> float:
     return min(covered / area, 1.0)
 
 
+READING_DPI = 110
+MAX_READING_PAGES = 12
+
+
+def page_images(data: bytes, mime: str, *, max_pages: int = MAX_READING_PAGES) -> list[tuple[str, bytes]]:
+    """Each page as a PNG with its label, for reading problems where the math layout matters.
+
+    PDFs are rendered at a modest resolution (math stays legible, the request
+    stays small); a photo is passed through upright. Other formats, and PDFs
+    longer than ``max_pages``, give nothing: their text layer is used alone.
+    """
+    if mime.startswith("image/"):
+        try:
+            return [("image", _png_bytes(_open_image(data)))]
+        except Exception:  # damaged or oversized: the text from OCR is still there
+            return []
+    if mime != "application/pdf":
+        return []
+    out: list[tuple[str, bytes]] = []
+    try:
+        with pymupdf.open(stream=data, filetype="pdf") as doc:
+            if doc.needs_pass or doc.page_count > max_pages:
+                return []
+            for index in range(doc.page_count):
+                zoom = READING_DPI / 72
+                pixmap = doc[index].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+                out.append((f"p. {index + 1}", pixmap.tobytes("png")))
+    except Exception:
+        return []
+    return out
+
+
 def _render(page: pymupdf.Page) -> pymupdf.Pixmap:
     zoom = OCR_DPI / 72
     pixels = page.rect.width * zoom * page.rect.height * zoom

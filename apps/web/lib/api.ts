@@ -1,4 +1,5 @@
 import type {
+  AnswerKind,
   AnswerResponse,
   AppSettings,
   SettingsChanges,
@@ -13,6 +14,7 @@ import type {
   ExamView,
   ExamWeight,
   FormulaSheet,
+  MaterialTopic,
   PhotoReading,
   Preview,
   ProgressView,
@@ -72,8 +74,12 @@ export const api = {
   logout: () => post<void>("/auth/logout"),
 
   catalog: () => request<Catalog>("/catalog"),
-  preview: (text: string, variables: string[], signal?: AbortSignal) =>
-    request<Preview>("/math/preview", { method: "POST", body: JSON.stringify({ text, variables }), signal }),
+  preview: (text: string, variables: string[], signal?: AbortSignal, answerKind: AnswerKind = "expression", units = false) =>
+    request<Preview>("/math/preview", {
+      method: "POST",
+      body: JSON.stringify({ text, variables, answer_kind: answerKind, units }),
+      signal,
+    }),
 
   worksheets: () => request<{ worksheets: WorksheetSummary[] }>("/practice/worksheets"),
   worksheet: (id: string) => request<Worksheet>(`/practice/worksheets/${id}`),
@@ -138,6 +144,9 @@ export const api = {
   source: (id: string) => request<SourceView>(`/sources/${id}`),
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: "DELETE" }),
   reprocessSource: (id: string) => post<SourceView>(`/sources/${id}/reprocess`),
+  readSource: (id: string) => post<SourceView>(`/sources/${id}/read`),
+  practiceSheet: (id: string) => post<Worksheet>(`/sources/${id}/practice`),
+  materialTopics: () => request<{ topics: MaterialTopic[] }>("/materials/topics"),
   uploadSource,
 };
 

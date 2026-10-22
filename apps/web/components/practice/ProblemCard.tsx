@@ -49,7 +49,9 @@ export function ProblemCard({ item, total, grade, busy, onAnswer, onHint, onSimi
       <MathText as="p" text={item.problem.prompt} className="text-lg leading-relaxed text-text sm:text-xl" />
       {item.problem.source && (
         <p className="-mt-3 text-xs text-muted">
-          Practice for {item.problem.source.title}, {item.problem.source.locator}
+          {item.problem.label
+            ? `Problem ${item.problem.label} on ${item.problem.source.title}, ${item.problem.source.locator}`
+            : `Practice for ${item.problem.source.title}, ${item.problem.source.locator}`}
         </p>
       )}
 
@@ -58,6 +60,7 @@ export function ProblemCard({ item, total, grade, busy, onAnswer, onHint, onSimi
           key={item.problem.id}
           variables={item.problem.variables}
           answerKind={item.problem.answer_kind}
+          units={item.problem.is_word}
           prompt={item.problem.prompt}
           busy={busy === "answer"}
           blocked={busy !== null}

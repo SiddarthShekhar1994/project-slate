@@ -16,7 +16,7 @@ from slate_skills.core.mistakes import CATEGORIES, mistake_type
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Attempt, MistakeTag, Worksheet, WorksheetItem
+from ..models import Attempt, MistakeTag, Topic, Worksheet, WorksheetItem
 from . import review
 from .ingest.notation import apply_notation
 from .mastery import skill_mastery
@@ -50,6 +50,25 @@ def skill_map(db: Session, user_id: uuid.UUID) -> list[dict]:
         .group_by(Attempt.skill_id)
     ).all())
     cards = {c.skill_id: c for c in review.cards(db, user_id)}
+    topics = list(db.scalars(select(Topic).where(Topic.user_id == user_id).order_by(Topic.created_at)))
+    mastery.update(skill_mastery(db, user_id, [t.id for t in topics]) if topics else {})
+
+    def row(skill_id: str, title: str, summary: str, prerequisites: tuple[str, ...] = (), lessons: bool = True) -> dict:
+        return {
+            "id": skill_id,
+            "title": title,
+            "summary": summary,
+            "mastery": mastery[skill_id].mastery,
+            "status": mastery[skill_id].status,
+            "attempts": counts.get(skill_id, 0),
+            "first_try_rate": (round(first.get(skill_id, 0) / firsts[skill_id], 3)
+                               if firsts.get(skill_id) else None),
+            "last_practiced_at": last[skill_id].isoformat() if skill_id in last else None,
+            "due_at": cards[skill_id].due_at.isoformat() if skill_id in cards else None,
+            "prerequisites": list(prerequisites),
+            "lessons": lessons,
+        }
+
     out = []
     for course in courses():
         out.append({
@@ -58,20 +77,16 @@ def skill_map(db: Session, user_id: uuid.UUID) -> list[dict]:
             "units": [{
                 "id": unit.id,
                 "title": unit.title,
-                "skills": [{
-                    "id": skill.id,
-                    "title": skill.title,
-                    "summary": skill.summary,
-                    "mastery": mastery[skill.id].mastery,
-                    "status": mastery[skill.id].status,
-                    "attempts": counts.get(skill.id, 0),
-                    "first_try_rate": (round(first.get(skill.id, 0) / firsts[skill.id], 3)
-                                       if firsts.get(skill.id) else None),
-                    "last_practiced_at": last[skill.id].isoformat() if skill.id in last else None,
-                    "due_at": cards[skill.id].due_at.isoformat() if skill.id in cards else None,
-                    "prerequisites": list(skill.prerequisites),
-                } for skill in unit.skills],
+                "skills": [row(skill.id, skill.title, skill.summary, skill.prerequisites) for skill in unit.skills],
             } for unit in course.units],
+        })
+    if topics:
+        # Topics Slate found in the student's own uploads, beyond the built-in course.
+        out.append({
+            "id": "materials",
+            "title": "From your materials",
+            "units": [{"id": "materials", "title": "Topics from your uploads",
+                       "skills": [row(t.id, t.title, t.summary, lessons=False) for t in topics]}],
         })
     return out
 

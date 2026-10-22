@@ -20,8 +20,16 @@ from typing import Any, Callable, Literal, Mapping
 
 import sympy as sp
 
-TaskKind = Literal["differentiate", "implicit_differentiate"]
-"""What the student is asked to produce. The verifier owns one oracle per kind."""
+TaskKind = Literal[
+    "differentiate", "implicit_differentiate",
+    "tangent_line", "linear_approx", "limit", "antiderivative", "definite_integral", "solve", "critical_points",
+    "extremum", "related_rates",
+]
+"""What the student is asked to produce. The verifier owns one oracle per kind.
+
+Skill templates use the first two. The rest are problems read from a
+student's own course materials (``slate_api.services.materials``), whose
+answer keys SymPy computes from a structured statement of the problem."""
 
 Difficulty = int
 """1 = easy, 2 = medium, 3 = hard, 4 = challenge."""

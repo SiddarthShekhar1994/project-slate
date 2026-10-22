@@ -19,6 +19,7 @@ from .routers import (
     catalog,
     exam,
     lessons,
+    materials,
     math,
     media,
     practice,
@@ -28,6 +29,7 @@ from .routers import (
 )
 from .services import app_settings as app_settings_service
 from .services import sandbox
+from .services.materials import service as materials_service
 from .services.lessons import sync_builtin_lessons
 
 
@@ -54,12 +56,15 @@ async def lifespan(app: FastAPI):
     with Session(get_engine()) as db:
         sync_skills(db)
         sync_builtin_lessons(db)
+        # Topics from students' materials are skills too; make them findable by id.
+        materials_service.register_all(db)
     yield
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Slate API", version="0.1.0", lifespan=lifespan)
-    for module in (app_settings, auth, catalog, exam, lessons, math, media, practice, progress, sources, voice):
+    for module in (app_settings, auth, catalog, exam, lessons, materials, math, media, practice, progress, sources,
+                   voice):
         app.include_router(module.router, prefix="/api")
 
     @app.get("/api/health")

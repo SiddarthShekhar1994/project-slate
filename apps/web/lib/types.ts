@@ -39,12 +39,17 @@ export type Mistake = {
 
 export type SolutionStep = { id: string; title: string; latex: string };
 
+/** How an answer is typed and read; everything but "expression" and "number" comes from course materials. */
+export type AnswerKind = "expression" | "number" | "line" | "values" | "limit" | "antiderivative";
+
 export type ProblemView = {
   id: string;
   prompt: string;
   variables: string[];
-  answer_kind: "expression" | "number";
+  answer_kind: AnswerKind;
   is_word: boolean;
+  /** The problem's number on the student's sheet, for problems that came from one. */
+  label?: string | null;
   hints: string[];
   solution: SolutionStep[] | null;
   answer_latex: string | null;
@@ -89,6 +94,8 @@ export type Worksheet = {
   stats: WorksheetStats;
   /** Study-pace exams only. */
   timer: { ends_at: string; now: string; time_limit_s: number | null } | null;
+  /** Made from one uploaded sheet, in the sheet's order. */
+  from_sheet?: boolean;
 };
 
 export type WorksheetSummary = {
@@ -181,7 +188,26 @@ export type SourceView = {
   chunks: number;
   skills: SourceSkill[];
   used_for: { lessons: { id: string; title: string }[]; problems: number };
+  reading: SourceReading | null;
   chunk_list?: SourceChunkView[];
+};
+
+export type SourceReading = {
+  status: "none" | "pending" | "done" | "failed" | "no_key";
+  error: string | null;
+  problems: number;
+  ready: number;
+  topics: { id: string | null; title: string; builtin: boolean; problems: number; ready: number }[];
+  not_checked: { label: string | null; kind: string; reason: string; statement: string }[];
+};
+
+export type MaterialTopic = {
+  id: string;
+  title: string;
+  summary: string;
+  problems: number;
+  from_sheets: number;
+  sources: string[];
 };
 
 export type SourceCitation = { source_id: string; title: string; kind: string; locator: string };
@@ -197,6 +223,8 @@ export type SkillProgress = {
   last_practiced_at: string | null;
   due_at: string | null;
   prerequisites: string[];
+  /** False for topics from the student's uploads, which have practice but no lessons yet. */
+  lessons?: boolean;
 };
 
 export type CourseProgress = {
@@ -268,7 +296,7 @@ export type ExamItem = {
   skill: { id: string; title: string };
   difficulty: number;
   difficulty_label: string;
-  problem: { id: string; prompt: string; variables: string[]; answer_kind: "expression" | "number"; is_word: boolean };
+  problem: { id: string; prompt: string; variables: string[]; answer_kind: AnswerKind; is_word: boolean };
   answer: string | null;
   result: {
     status: "correct" | "incorrect" | "blank";

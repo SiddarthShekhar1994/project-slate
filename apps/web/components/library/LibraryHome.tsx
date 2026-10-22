@@ -16,7 +16,7 @@ export function LibraryHome() {
   const lessons = useApi(() => api.lessons());
   const library = useApi(() => api.sources());
   const sources = library.data?.sources ?? [];
-  const processing = sources.some((s) => s.status === "processing");
+  const processing = sources.some((s) => s.status === "processing" || s.reading?.status === "pending");
 
   // While anything is still being read, refresh the list every two seconds.
   const setLibrary = library.setData;

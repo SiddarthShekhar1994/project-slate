@@ -57,6 +57,9 @@ class VerifiedProblem:
     signature: str
     origin: str = "template"
     parent_signature: str | None = None
+    # A problem read from course materials carries the generic spec for its
+    # kind (no mistake patterns), so grading never needs the skill registry.
+    spec: SkillSpec | None = None
     _mint: object = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -67,7 +70,7 @@ class VerifiedProblem:
 
     @property
     def skill(self) -> SkillSpec:
-        return get_skill(self.skill_id)
+        return self.spec if self.spec is not None else get_skill(self.skill_id)
 
     @property
     def params(self) -> dict:
@@ -108,6 +111,25 @@ def _wrap(skill: SkillSpec, built: Built, seed: int, report: VerificationReport,
         signature=problem_signature(skill.id, built),
         origin=origin,
         parent_signature=parent,
+        _mint=_MINT,
+    )
+
+
+def wrap_material(skill_id: str, built: Built, report: VerificationReport, hints: RenderedHints, signature: str, *,
+                  spec: SkillSpec, origin: str, parent: str | None = None) -> VerifiedProblem:
+    """A problem from course materials whose key ``materials.verify`` has checked."""
+    return VerifiedProblem(
+        skill_id=skill_id,
+        family=built.family,
+        difficulty=built.difficulty,
+        seed=0,
+        built=built,
+        report=report,
+        hints=hints,
+        signature=signature,
+        origin=origin,
+        parent_signature=parent,
+        spec=spec,
         _mint=_MINT,
     )
 

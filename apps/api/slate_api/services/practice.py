@@ -12,6 +12,10 @@ problem at a time:
 
 Wrong answers are stored with their mistake tag. Unreadable input is reported
 back to the student but is not a miss.
+
+Problems come from a skill's templates or, for a sheet the student uploaded
+and the topics found in it, from their course materials (``materials``). Both
+are verified before they are stored, and both run through the same loop.
 """
 
 from __future__ import annotations
@@ -21,18 +25,21 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from slate_skills import get_skill
+from slate_skills import get_skill, is_builtin
 from slate_skills.core.types import DIFFICULTY_LABELS
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Attempt, Citation, MistakeTag, Problem, SourceChunk, User, Worksheet, WorksheetItem
+from ..models import Attempt, Citation, MistakeTag, Problem, Source, SourceChunk, User, Worksheet, WorksheetItem
 from . import review, sandbox
 from .grading import Grade, grade_answer
+from .materials import service as materials
+from .materials.kinds import answer_kind, answer_symbols
 from .problem_gen import VerifiedProblem, build_worksheet, restore, similar
 from .verify import VerificationReport
 
 MAX_WORKSHEET = 12
+MAX_SHEET = 30
 
 
 class PracticeError(ValueError):
@@ -50,8 +57,13 @@ def _now() -> datetime:
 # --- storing and loading problems ---------------------------------------------------
 
 
+def _is_material(problem: VerifiedProblem) -> bool:
+    return problem.family.startswith("material:")
+
+
 def store_problem(db: Session, user: User, problem: VerifiedProblem, parent_id: uuid.UUID | None = None) -> Problem:
     built = problem.built
+    material = _is_material(problem)
     row = Problem(
         user_id=user.id,
         skill_id=problem.skill_id,
@@ -63,8 +75,8 @@ def store_problem(db: Session, user: User, problem: VerifiedProblem, parent_id: 
         origin=problem.origin,
         parent_id=parent_id,
         prompt=built.prompt,
-        variables=[s.name for s in built.symbols],
-        answer_kind="number" if built.at else "expression",
+        variables=[s.name for s in (answer_symbols(built) if material else built.symbols)],
+        answer_kind=answer_kind(built) if material else ("number" if built.at else "expression"),
         key_latex=_latex(built.key),
         steps=[{"id": s.id, "title": s.title, "latex": s.latex} for s in built.steps],
         hints=[problem.hints.nudge, problem.hints.bigger, problem.hints.full_step],
@@ -73,15 +85,17 @@ def store_problem(db: Session, user: User, problem: VerifiedProblem, parent_id: 
     )
     db.add(row)
     db.flush()
-    _cite(db, user, row)
+    _cite(db, user, row, problem.params.get("chunk_id") if material else None)
     return row
 
 
-def _cite(db: Session, user: User, row: Problem) -> None:
-    """Point the problem at the student's best source for its skill, if they have one."""
+def _cite(db: Session, user: User, row: Problem, chunk_id: str | None = None) -> None:
+    """Point the problem at the chunk it came from, or the student's best source for its skill."""
     from .sources import best_chunk_for_skill
 
-    chunk = best_chunk_for_skill(db, user.id, row.skill_id)
+    chunk = db.get(SourceChunk, uuid.UUID(chunk_id)) if chunk_id else None
+    if chunk is None:
+        chunk = best_chunk_for_skill(db, user.id, row.skill_id)
     if chunk is not None:
         row.source_chunk_id = chunk.id
         db.add(Citation(chunk_id=chunk.id, problem_id=row.id))
@@ -94,6 +108,8 @@ def _latex(expr) -> str:
 
 
 def load_problem(row: Problem) -> VerifiedProblem:
+    if materials.is_material(row):
+        return materials.load(row)
     return restore(row.skill_id, row.family, row.params, row.seed,
                    VerificationReport.from_dict(row.verification), row.signature, origin=row.origin)
 
@@ -119,12 +135,61 @@ def create_worksheet(db: Session, user: User, skill_ids: list[str], count: int, 
             raise PracticeError(f"Unknown skill {skill_id}.", 422) from None
     count = max(1, min(count, MAX_WORKSHEET))
     seed = seed if seed is not None else secrets.randbits(31)
-    problems = build_worksheet(skill_ids, count, seed)
+    problems = _plan(db, user, skill_ids, count, seed)
 
     sheet = Worksheet(user_id=user.id, title=title or _title(skill_ids), skill_ids=skill_ids, mode=mode, seed=seed)
     db.add(sheet)
     db.flush()
     for position, problem in enumerate(problems):
+        row = store_problem(db, user, problem)
+        db.add(WorksheetItem(
+            worksheet_id=sheet.id, position=position, skill_id=problem.skill_id, difficulty=problem.difficulty,
+            root_problem_id=row.id, current_problem_id=row.id, status="up_next",
+        ))
+    db.flush()
+    db.refresh(sheet)
+    return sheet
+
+
+def _plan(db: Session, user: User, skill_ids: list[str], count: int, seed: int) -> list[VerifiedProblem]:
+    """Problems for a worksheet: templates for built-in skills, course materials for the student's topics."""
+    builtin = [s for s in skill_ids if is_builtin(s)]
+    topics = [s for s in skill_ids if not is_builtin(s)]
+    for topic in topics:
+        if not materials.owns_topic(db, user.id, topic):
+            raise PracticeError(f"Unknown skill {topic}.", 422)
+    shares = [count // len(skill_ids) + (1 if i < count % len(skill_ids) else 0) for i in range(len(skill_ids))]
+    share = dict(zip(skill_ids, shares))
+    problems: list[VerifiedProblem] = []
+    if builtin:
+        problems += build_worksheet(builtin, sum(share[s] for s in builtin), seed)
+    seen = {p.signature for p in problems}
+    for topic in topics:
+        if share[topic] == 0:
+            continue
+        found = materials.topic_problems(db, user, topic, share[topic], exclude=seen)
+        if not found:
+            raise PracticeError(f"There are no checked problems for {get_skill(topic).title.lower()} yet.", 409)
+        seen |= {p.signature for p in found}
+        problems += found
+    return sorted(problems, key=lambda p: p.difficulty) if topics else problems
+
+
+def create_sheet_worksheet(db: Session, user: User, source_id: uuid.UUID) -> Worksheet:
+    """The problems on an uploaded sheet that Slate could check, in the sheet's order."""
+    from .sources import get_source
+
+    source: Source = get_source(db, user, source_id)
+    rows = [r for r in materials.sheet_rows(db, source) if r.status == "ready"][:MAX_SHEET]
+    if not rows:
+        raise PracticeError("Slate didn't find problems on this sheet that it can check.", 409)
+    skill_ids = list(dict.fromkeys(r.skill_id for r in rows if r.skill_id))
+    sheet = Worksheet(user_id=user.id, title=f"{source.title}"[:150], skill_ids=skill_ids, mode="practice",
+                      seed=0, settings={"source_id": str(source.id)})
+    db.add(sheet)
+    db.flush()
+    for position, material in enumerate(rows):
+        problem = materials.problem_from_row(material)
         row = store_problem(db, user, problem)
         db.add(WorksheetItem(
             worksheet_id=sheet.id, position=position, skill_id=problem.skill_id, difficulty=problem.difficulty,
@@ -230,10 +295,16 @@ def serve_similar(db: Session, user: User, item_id: uuid.UUID) -> WorksheetItem:
     if item.status != "retrying":
         raise PracticeError("A similar problem is offered after a missed answer.")
     current = load_problem(item.current_problem)
-    seen = set(db.scalars(
-        select(Problem.signature).where(Problem.user_id == user.id, Problem.skill_id == item.skill_id)
-    ))
-    fresh = similar(current, attempt=item.problems_served, exclude=seen)
+    if _is_material(current):
+        fresh = materials.similar_problem(db, user, item.skill_id, current, attempt=item.problems_served)
+        if fresh is None:
+            raise PracticeError("Slate doesn't have another problem like this one yet. Move on to the next "
+                                "problem and come back to this one.", 409)
+    else:
+        seen = set(db.scalars(
+            select(Problem.signature).where(Problem.user_id == user.id, Problem.skill_id == item.skill_id)
+        ))
+        fresh = similar(current, attempt=item.problems_served, exclude=seen)
     row = store_problem(db, user, fresh, parent_id=item.current_problem_id)
     item.current_problem_id = row.id
     item.problems_served += 1
@@ -265,6 +336,7 @@ def reveal_hint(db: Session, user: User, item_id: uuid.UUID, level: int) -> Work
 def item_view(db: Session, item: WorksheetItem) -> dict:
     problem = item.current_problem
     skill = get_skill(item.skill_id)
+    material = materials.is_material(problem)
     cleared = item.status in ("cleared", "cleared_after_retry")
     last = db.scalars(
         select(Attempt).where(Attempt.worksheet_item_id == item.id, Attempt.problem_id == problem.id)
@@ -286,7 +358,8 @@ def item_view(db: Session, item: WorksheetItem) -> dict:
             "prompt": problem.prompt,
             "variables": problem.variables,
             "answer_kind": problem.answer_kind,
-            "is_word": skill.family(problem.family).word,
+            "is_word": bool(problem.params.get("word")) if material else skill.family(problem.family).word,
+            "label": (problem.params.get("label") or None) if material else None,
             "hints": problem.hints[: item.hint_level],
             "solution": problem.steps if cleared else None,
             "answer_latex": problem.key_latex if cleared else None,
@@ -351,6 +424,8 @@ def worksheet_view(db: Session, sheet: Worksheet) -> dict:
         "items": [item_view(db, item) for item in sheet.items],
         "stats": stats(sheet),
         "timer": _timer(sheet),
+        # Practice made from one uploaded sheet keeps the sheet's order.
+        "from_sheet": bool((sheet.settings or {}).get("source_id")),
     }
 
 

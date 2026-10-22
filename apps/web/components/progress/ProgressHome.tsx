@@ -184,9 +184,11 @@ function SkillRow({
         {details.length > 0 && <p className="mt-1.5 text-xs text-muted">{details.join(" · ")}</p>}
       </div>
       <div className="flex gap-2">
-        <Link href={`/lesson?skill=${encodeURIComponent(skill.id)}`} className={buttonClasses("ghost")}>
-          Lesson<span className="sr-only">: {skill.title}</span>
-        </Link>
+        {skill.lessons !== false && (
+          <Link href={`/lesson?skill=${encodeURIComponent(skill.id)}`} className={buttonClasses("ghost")}>
+            Lesson<span className="sr-only">: {skill.title}</span>
+          </Link>
+        )}
         <Button variant="secondary" onClick={onPractice} disabled={disabled} aria-busy={busy}>
           {busy ? "Building…" : "Practice"}
           <span className="sr-only">: {skill.title}</span>

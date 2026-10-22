@@ -75,6 +75,17 @@ _TYPES = [
                 "Got the sign of $\\frac{d}{dx}\\sin x$ or $\\frac{d}{dx}\\cos x$ backwards."),
     MistakeType("exp_log_derivative_error", "Exponential or log derivative error", "rule",
                 "Used the wrong derivative for $e^x$ or $\\ln x$."),
+    # Problems read from course materials: lists of values, limits, tangent lines
+    MistakeType("missed_value", "Missed a value", "algebra",
+                "Found some of the answers but not all of them, often by dividing by something that can be zero."),
+    MistakeType("extra_value", "Extra value", "algebra",
+                "Listed a value that isn't an answer. Check the domain and the interval."),
+    MistakeType("one_sided_limit", "Gave a one-sided limit", "rule",
+                "The limits from the left and the right differ, so the two-sided limit doesn't exist."),
+    MistakeType("tangent_wrong_point", "Tangent line through the wrong point", "rule",
+                "The slope is right, but the line doesn't pass through the point on the curve."),
+    MistakeType("tangent_wrong_slope", "Tangent line with the wrong slope", "rule",
+                "The line passes through the point, but its slope isn't the derivative there."),
     # Generic, detected by the grader
     MistakeType("sign_error", "Sign error", "sign",
                 "Right structure, but the sign of the answer or of one term is flipped."),

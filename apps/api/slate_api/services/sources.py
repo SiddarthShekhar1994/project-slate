@@ -4,6 +4,7 @@ Processing runs after the upload request returns:
 
     stored file -> extract -> OCR the pages that need it -> chunk by topic
     -> score each chunk against every skill -> note the notation it uses
+    -> (with a Claude key) read the problems and topics, see ``materials``
 
 A failure marks the source ``failed`` with a message the student can act on;
 it never leaves a half-written set of chunks behind.
@@ -110,8 +111,8 @@ def create_source(db: Session, user: User, filename: str, data: bytes, kind: str
     return source
 
 
-def process_source(source_id: uuid.UUID, *, llm=None) -> None:
-    """Extract, OCR, chunk, match and store. Runs in the background after upload."""
+def process_source(source_id: uuid.UUID, *, llm=None, read: bool = True) -> None:
+    """Extract, OCR, chunk, match and store, then read its problems. Runs in the background after upload."""
     from .ingest.chunk import chunk_pages
     from .ingest.extract import ExtractionError, extract
     from .ingest.match import match_skills
@@ -155,6 +156,11 @@ def process_source(source_id: uuid.UUID, *, llm=None) -> None:
             source.status, source.error = "failed", "Something went wrong reading that file. Try uploading it again."
         source.processed_at = _now()
         db.commit()
+        ready = source.status == "ready"
+    if ready and read:
+        from .materials.service import read_source
+
+        read_source(source_id, llm=llm)
 
 
 def user_sources(db: Session, user: User) -> list[Source]:
@@ -205,6 +211,12 @@ def used_for(db: Session, source: Source) -> dict:
     return {"lessons": [{"id": str(i), "title": t} for i, t in lessons], "problems": problems}
 
 
+def reading_view(db: Session, source: Source) -> dict:
+    from .materials.service import reading_view as view
+
+    return view(db, source)
+
+
 def source_view(db: Session, source: Source, *, with_chunks: bool = False) -> dict:
     view = {
         "id": str(source.id),
@@ -222,6 +234,7 @@ def source_view(db: Session, source: Source, *, with_chunks: bool = False) -> di
         "chunks": len(source.chunks),
         "skills": _skill_summary(source.chunks),
         "used_for": used_for(db, source),
+        "reading": reading_view(db, source) if source.status == "ready" else None,
     }
     if with_chunks:
         view["chunk_list"] = [
